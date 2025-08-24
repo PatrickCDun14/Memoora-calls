@@ -1,7 +1,9 @@
 // src/twilio.js
-const { VoiceResponse } = require('twilio');
+const twilio = require('twilio');
+const { VoiceResponse } = twilio;
 const axios = require('axios');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 
 class TwilioHelpers {
