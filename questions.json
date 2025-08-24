@@ -1,0 +1,90 @@
+[
+  {
+    "id": "q1",
+    "prompt": "Hi! Welcome to Memoora. I'm here to help you share your family stories. To get started, what's your name?",
+    "type": "free_text",
+    "next": "q2",
+    "context_key": "name",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q2",
+    "prompt": "Nice to meet you, {{name}}. What brings you to our service today? Are you looking to share a specific memory or story?",
+    "type": "free_text",
+    "next": "q3",
+    "context_key": "purpose",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q3",
+    "prompt": "That sounds wonderful, {{name}}. What's a childhood memory that still makes you smile when you think about it?",
+    "type": "free_text",
+    "next": "q4",
+    "context_key": "childhood_memory",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q4",
+    "prompt": "That's a beautiful memory, {{name}}. Can you tell me more about who was there with you and what made it so special?",
+    "type": "free_text",
+    "next": "q5",
+    "context_key": "memory_details",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q5",
+    "prompt": "Thank you for sharing that, {{name}}. Now, what's something you learned from your grandparents or older family members that you still use today?",
+    "type": "free_text",
+    "next": "q6",
+    "context_key": "grandparent_lesson",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q6",
+    "prompt": "That's a valuable lesson, {{name}}. What's a time when you felt truly proud of yourself or accomplished something important?",
+    "type": "free_text",
+    "next": "q7",
+    "context_key": "proud_moment",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q7",
+    "prompt": "That's inspiring, {{name}}. What's something you wish you could tell your younger self if you had the chance?",
+    "type": "free_text",
+    "next": "q8",
+    "context_key": "advice_to_younger_self",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q8",
+    "prompt": "That's very thoughtful, {{name}}. What's a family tradition that's most important to you and why?",
+    "type": "free_text",
+    "next": "q9",
+    "context_key": "family_tradition",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q9",
+    "prompt": "That tradition sounds meaningful, {{name}}. What's something you've learned about love or relationships that you'd want to pass on to others?",
+    "type": "free_text",
+    "next": "q10",
+    "context_key": "love_lesson",
+    "validation": "not_empty"
+  },
+  {
+    "id": "q10",
+    "prompt": "Thank you for sharing that wisdom, {{name}}. Finally, what's one thing you hope people remember about you when you're no longer here?",
+    "type": "free_text",
+    "next": "end",
+    "context_key": "legacy",
+    "validation": "not_empty"
+  },
+  {
+    "id": "end",
+    "prompt": "Thank you so much, {{name}}, for sharing these beautiful stories and memories with me. Your family is lucky to have you, and these stories will be treasured for generations to come. Have a wonderful day, and thank you for preserving your legacy through voice.",
+    "type": "closing",
+    "next": null,
+    "context_key": null,
+    "validation": null
+  }
+]
