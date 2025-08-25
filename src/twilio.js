@@ -12,132 +12,77 @@ class TwilioHelpers {
   }
 
   /**
-   * Generate TwiML for starting a conversation
+   * Check if recording is available
    */
-  generateConversationStart(question, baseUrl) {
-    const twiml = new twilio.twiml.VoiceResponse();
-    
-    // Welcome message
-    twiml.say({
-      voice: 'alice',
-      language: 'en-US'
-    }, question.prompt);
-    
-    // Start recording the answer
-    twiml.record({
-      action: `${baseUrl}/api/v1/interactive/handle-recording`,
-      method: 'POST',
-      maxLength: 60, // 60 seconds max for cost optimization
-      finishOnKey: '#',
-      playBeep: false,
-      trim: 'trim-silence'
-    });
-    
-    // If they don't say anything, give them another chance
-    twiml.say({
-      voice: 'alice',
-      language: 'en-US'
-    }, 'I didn\'t hear anything. Please try again.');
-    
-    twiml.record({
-      action: `${baseUrl}/api/v1/interactive/handle-recording`,
-      method: 'POST',
-      maxLength: 60,
-      finishOnKey: '#',
-      playBeep: false,
-      trim: 'trim-silence'
-    });
-    
-    return twiml.toString();
-  }
-
-  /**
-   * Generate TwiML for continuing conversation
-   */
-  generateConversationContinue(question, baseUrl) {
-    const twiml = new twilio.twiml.VoiceResponse();
-    
-    // Ask the next question
-    twiml.say({
-      voice: 'alice',
-      language: 'en-US'
-    }, question.prompt);
-    
-    // Record the answer
-    twiml.record({
-      action: `${baseUrl}/api/v1/interactive/handle-recording`,
-      method: 'POST',
-      maxLength: 60,
-      finishOnKey: '#',
-      playBeep: false,
-      trim: 'trim-silence'
-    });
-    
-    return twiml.toString();
-  }
-
-  /**
-   * Generate TwiML for conversation end
-   */
-  generateConversationEnd(closingMessage) {
-    const twiml = new twilio.twiml.VoiceResponse();
-    
-    // Say closing message
-    twiml.say({
-      voice: 'alice',
-      language: 'en-US'
-    }, closingMessage);
-    
-    // Hang up
-    twiml.hangup();
-    
-    return twiml.toString();
-  }
-
-  /**
-   * Generate TwiML for error/retry
-   */
-  generateRetryMessage(message, baseUrl) {
-    const twiml = new twilio.twiml.VoiceResponse();
-    
-    twiml.say({
-      voice: 'alice',
-      language: 'en-US'
-    }, message);
-    
-    // Give them another chance to answer
-    twiml.record({
-      action: `${baseUrl}/api/v1/interactive/handle-recording`,
-      method: 'POST',
-      maxLength: 60,
-      finishOnKey: '#',
-      playBeep: false,
-      trim: 'trim-silence'
-    });
-    
-    return twiml.toString();
-  }
-
-  /**
-   * Download recording from Twilio
-   */
-  async downloadRecording(recordingUrl, callSid) {
+  async checkRecordingAvailability(recordingUrl) {
     try {
-      console.log(`⬇️ Downloading recording from: ${recordingUrl}`);
+      const recordingSidMatch = recordingUrl.match(/Recordings\/([^\/\?]+)/);
+      if (!recordingSidMatch) {
+        return false;
+      }
       
-      // Add .mp3 extension if not present
-      const downloadUrl = recordingUrl.endsWith('.mp3') ? recordingUrl : `${recordingUrl}.mp3`;
+      const recordingSid = recordingSidMatch[1];
+      const apiUrl = `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}/Recordings/${recordingSid}`;
       
       const response = await axios({
         method: 'GET',
-        url: downloadUrl,
+        url: apiUrl,
+        auth: {
+          username: this.accountSid,
+          password: this.authToken
+        },
+        timeout: 10000
+      });
+      
+      return response.status === 200;
+    } catch (error) {
+      console.log(`ℹ️ Recording availability check failed: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Download recording from Twilio with retry logic
+   */
+  async downloadRecording(recordingUrl, callSid, retryCount = 0) {
+    try {
+      console.log(`⬇️ Downloading recording from: ${recordingUrl} (attempt ${retryCount + 1})`);
+      
+      // Extract recording SID from URL
+      const recordingSidMatch = recordingUrl.match(/Recordings\/([^\/\?]+)/);
+      if (!recordingSidMatch) {
+        throw new Error('Invalid recording URL format');
+      }
+      
+      const recordingSid = recordingSidMatch[1];
+      console.log(`🎵 Recording SID: ${recordingSid}`);
+      
+      // Construct proper Twilio API URL
+      const apiUrl = `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}/Recordings/${recordingSid}.mp3`;
+      console.log(`🔗 API URL: ${apiUrl}`);
+      
+      // Validate credentials
+      this.validateCredentials();
+      
+      const response = await axios({
+        method: 'GET',
+        url: apiUrl,
         responseType: 'stream',
         auth: {
           username: this.accountSid,
           password: this.authToken
         },
-        timeout: 30000 // 30 second timeout
+        headers: {
+          'Accept': 'audio/mpeg,audio/mp3,*/*',
+          'User-Agent': 'Memoora-Calls/1.0'
+        },
+        timeout: 30000, // 30 second timeout
+        validateStatus: function (status) {
+          return status >= 200 && status < 300; // Accept only 2xx status codes
+        }
       });
+      
+      console.log(`✅ Recording download response: ${response.status} ${response.statusText}`);
       
       // Create recordings directory if it doesn't exist
       const recordingsDir = path.join(__dirname, '..', 'recordings', 'interactive');
@@ -165,35 +110,31 @@ class TwilioHelpers {
       });
       
     } catch (error) {
-      console.error('❌ Error downloading recording:', error);
+      console.error(`❌ Error downloading recording (attempt ${retryCount + 1}):`, error);
+      
+      // Log more details for debugging
+      if (error.response) {
+        console.error('❌ Response status:', error.response.status);
+        console.error('❌ Response headers:', error.response.headers);
+        console.error('❌ Response data:', error.response.data);
+      }
+      
+      if (error.request) {
+        console.error('❌ Request details:', {
+          method: error.request.method,
+          url: error.request.url,
+          headers: error.request.getHeaders?.()
+        });
+      }
+      
+      // Retry logic for 404 errors (recording might not be ready yet)
+      if (error.response?.status === 404 && retryCount < 2) {
+        console.log(`🔄 Recording not ready yet, retrying in 2 seconds... (${retryCount + 1}/3)`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return this.downloadRecording(recordingUrl, callSid, retryCount + 1);
+      }
+      
       throw error;
-    }
-  }
-
-  /**
-   * Get recording metadata
-   */
-  async getRecordingMetadata(recordingUrl) {
-    try {
-      const response = await axios({
-        method: 'GET',
-        url: recordingUrl,
-        auth: {
-          username: this.accountSid,
-          password: this.authToken
-        }
-      });
-      
-      return {
-        duration: response.data.duration,
-        size: response.data.size,
-        channels: response.data.channels,
-        sampleRate: response.data.sample_rate
-      };
-      
-    } catch (error) {
-      console.error('❌ Error getting recording metadata:', error);
-      return null;
     }
   }
 
@@ -205,22 +146,6 @@ class TwilioHelpers {
       throw new Error('Twilio credentials not configured. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.');
     }
     return true;
-  }
-
-  /**
-   * Generate TwiML for testing
-   */
-  generateTestTwiML() {
-    const twiml = new twilio.twiml.VoiceResponse();
-    
-    twiml.say({
-      voice: 'alice',
-      language: 'en-US'
-    }, 'Hello! This is a test of the interactive phone bot. The system is working correctly.');
-    
-    twiml.hangup();
-    
-    return twiml.toString();
   }
 }
 

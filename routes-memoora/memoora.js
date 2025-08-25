@@ -631,6 +631,18 @@ router.post('/interactive/handle-recording', async (req, res) => {
     // Download recording
     const TwilioHelpers = require('../src/twilio');
     const twilio = new TwilioHelpers();
+    
+    // Check if recording is available first
+    console.log('🔍 Checking recording availability...');
+    const isAvailable = await twilio.checkRecordingAvailability(recordingUrl);
+    
+    if (!isAvailable) {
+      console.log('⏳ Recording not ready yet, waiting...');
+      // Wait a bit for the recording to be processed
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    
+    console.log('⬇️ Starting recording download...');
     const { filepath } = await twilio.downloadRecording(recordingUrl, callSid);
 
     // Transcribe with Whisper
