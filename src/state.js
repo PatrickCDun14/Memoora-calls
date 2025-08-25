@@ -3,6 +3,11 @@ const Redis = require('ioredis');
 
 class ConversationState {
   constructor() {
+    // Singleton pattern - only create one instance
+    if (ConversationState.instance) {
+      return ConversationState.instance;
+    }
+    
     this.backend = process.env.STATE_BACKEND || 'memory';
     this.redis = null;
     this.memoryState = new Map();
@@ -10,6 +15,9 @@ class ConversationState {
     if (this.backend === 'redis') {
       this.initializeRedis();
     }
+    
+    // Store the instance
+    ConversationState.instance = this;
   }
 
   /**
