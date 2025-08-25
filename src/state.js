@@ -90,7 +90,10 @@ class ConversationState {
    */
   async addAnswer(callSid, questionId, answer, transcript) {
     try {
+      console.log(`🔍 Adding answer for question ${questionId}:`, { answer, transcript });
+      
       const currentState = await this.getState(callSid);
+      console.log('🔍 Current state before adding answer:', currentState);
       
       const updatedState = {
         ...currentState,
@@ -110,7 +113,16 @@ class ConversationState {
         last_updated: new Date().toISOString()
       };
       
-      return await this.setState(callSid, updatedState);
+      console.log('🔍 Updated state after adding answer:', updatedState);
+      
+      const result = await this.setState(callSid, updatedState);
+      console.log(`🔍 Answer save result: ${result}`);
+      
+      // Verify the answer was saved
+      const verifyState = await this.getState(callSid);
+      console.log('🔍 Verification - state after save:', verifyState);
+      
+      return result;
     } catch (error) {
       console.error('❌ Error adding answer:', error);
       return false;
