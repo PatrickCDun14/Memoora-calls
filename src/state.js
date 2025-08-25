@@ -43,13 +43,13 @@ class ConversationState {
     try {
       if (this.backend === 'redis' && this.redis) {
         const stateData = await this.redis.get(`conv:${callSid}`);
-        return stateData ? JSON.parse(stateData) : this.getDefaultState();
+        return stateData ? JSON.parse(stateData) : null;
       } else {
-        return this.memoryState.get(callSid) || this.getDefaultState();
+        return this.memoryState.get(callSid) || null;
       }
     } catch (error) {
       console.error('❌ Error getting state:', error);
-      return this.getDefaultState();
+      return null;
     }
   }
 

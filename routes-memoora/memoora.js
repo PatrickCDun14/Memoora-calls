@@ -712,7 +712,23 @@ async function continueConversation(callSid, transcript) {
     
     if (!conversationState) {
       console.log('❌ No conversation state found for call:', callSid);
-      return;
+      console.log('🔄 Initializing new conversation state...');
+      
+      // Initialize new conversation state
+      const initialState = state.getDefaultState();
+      await state.setState(callSid, initialState);
+      
+      console.log('✅ New conversation state initialized:', initialState);
+      
+      // Get the newly created state
+      const newState = await state.getState(callSid);
+      if (!newState) {
+        console.log('❌ Failed to initialize conversation state');
+        return;
+      }
+      
+      // Continue with the new state
+      conversationState = newState;
     }
 
     console.log('✅ Conversation state retrieved:', conversationState);
