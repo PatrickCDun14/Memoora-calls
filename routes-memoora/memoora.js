@@ -573,6 +573,7 @@ router.post('/interactive/start', async (req, res) => {
     console.error('❌ Error starting interactive conversation:', error);
     
     // Fallback to basic voice
+    const twilio = require('twilio');
     const fallbackTwiml = new twilio.twiml.VoiceResponse();
     fallbackTwiml.say('Hello! Welcome to Memoora. Please share your story.');
     fallbackTwiml.record({
@@ -623,22 +624,28 @@ router.post('/interactive/handle-recording', async (req, res) => {
     // Get conversation state
     const ConversationState = require('../src/state');
     const state = new ConversationState();
+    console.log('🎭 Getting conversation state for call:', callSid);
     const conversationState = await state.getState(callSid);
+    console.log('✅ Conversation state retrieved:', conversationState);
 
     // Get current question
     const ConversationFlow = require('../src/flow');
     const flow = new ConversationFlow();
     await flow.loadQuestions();
     
+    console.log('🎭 Current question ID:', conversationState.current_question);
     const currentQuestion = flow.getQuestion(conversationState.current_question);
+    console.log('✅ Current question retrieved:', currentQuestion);
 
     // Analyze answer with GPT-4o-mini
+    console.log('🧠 Starting AI analysis with GPT-4o-mini...');
     const analysis = await openai.analyzeAnswerAndDetermineNext(
       currentQuestion, 
       transcript, 
       conversationState, 
       flow
     );
+    console.log('✅ AI analysis completed:', analysis);
 
     // Add answer to state
     await state.addAnswer(callSid, currentQuestion.id, transcript, transcript);
