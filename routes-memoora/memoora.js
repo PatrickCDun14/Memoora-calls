@@ -763,23 +763,26 @@ async function continueConversation(callSid, transcript) {
     if (nextQuestionId && nextQuestionId !== 'end') {
       console.log('🔄 Triggering next question:', nextQuestionId);
       
-      // Get the next question
-      const nextQuestion = flow.getQuestion(nextQuestionId);
-      
-      if (nextQuestion && nextQuestion.type !== 'closing') {
-        // Continue conversation with next question
-        console.log('🔄 Continuing conversation with next question:', nextQuestion.id);
+      // Check if we should use dynamic questions
+      if (flow.shouldUseDynamicQuestions(conversationState, nextQuestionId)) {
+        console.log('🧠 Using dynamic question generation...');
         
-        // Generate TwiML for the next question
+        // Generate a dynamic question based on context
+        const dynamicQuestion = await openai.generateDynamicQuestion(
+          conversationState, 
+          transcript, 
+          flow
+        );
+        
+        console.log('✅ Dynamic question generated:', dynamicQuestion);
+        
+        // Generate TwiML with dynamic question
         const twiml = new twilio.twiml.VoiceResponse();
-        
-        // Process prompt with context variables
-        const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
         
         twiml.say({
           voice: 'alice',
           language: 'en-US'
-        }, processedPrompt);
+        }, dynamicQuestion);
         
         twiml.record({
           action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
@@ -792,24 +795,57 @@ async function continueConversation(callSid, transcript) {
           transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
         });
         
-        // Return the TwiML so it can be sent to the user
         return twiml;
         
       } else {
-        // End conversation
-        console.log('🎉 Ending conversation with closing message');
+        // Use scripted question
+        const nextQuestion = flow.getQuestion(nextQuestionId);
         
-        const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
-        const twiml = new twilio.twiml.VoiceResponse();
-        
-        twiml.say({
-          voice: 'alice',
-          language: 'en-US'
-        }, closingMessage);
-        
-        twiml.hangup();
-        
-        return twiml;
+        if (nextQuestion && nextQuestion.type !== 'closing') {
+          // Continue conversation with scripted question
+          console.log('🔄 Continuing conversation with scripted question:', nextQuestion.id);
+          
+          // Generate TwiML for the next question
+          const twiml = new twilio.twiml.VoiceResponse();
+          
+          // Process prompt with context variables
+          const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
+          
+          twiml.say({
+            voice: 'alice',
+            language: 'en-US'
+          }, processedPrompt);
+          
+          twiml.record({
+            action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+            method: 'POST',
+            maxLength: 60,
+            finishOnKey: '#',
+            playBeep: false,
+            trim: 'trim-silence',
+            transcribe: true,
+            transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+          });
+          
+          // Return the TwiML so it can be sent to the user
+          return twiml;
+          
+        } else {
+          // End conversation
+          console.log('🎉 Ending conversation with closing message');
+          
+          const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
+          const twiml = new twilio.twiml.VoiceResponse();
+          
+          twiml.say({
+            voice: 'alice',
+            language: 'en-US'
+          }, closingMessage);
+          
+          twiml.hangup();
+          
+          return twiml;
+        }
       }
     } else {
       // End conversation

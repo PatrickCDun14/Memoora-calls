@@ -166,6 +166,28 @@ class ConversationFlow {
   getQuestionCount() {
     return this.questions.length;
   }
+
+  /**
+   * Check if we should use dynamic questions based on conversation progress
+   */
+  shouldUseDynamicQuestions(conversationContext, currentQuestionId) {
+    // Use dynamic questions after the first 2-3 foundation questions
+    const foundationQuestions = ['q1', 'q2', 'q3'];
+    const hasFoundation = foundationQuestions.some(q => 
+      conversationContext.answers && conversationContext.answers[q]
+    );
+    
+    const isPastFoundation = !foundationQuestions.includes(currentQuestionId);
+    
+    return hasFoundation && isPastFoundation;
+  }
+
+  /**
+   * Get a dynamic question prompt for the current context
+   */
+  getDynamicQuestionPrompt() {
+    return "I'd love to hear more about your story. What would you like to share next?";
+  }
 }
 
 module.exports = ConversationFlow;

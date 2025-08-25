@@ -60,15 +60,16 @@ class OpenAIHelpers {
       
       const systemPrompt = `You are an AI assistant helping to conduct meaningful family story interviews. Your role is to:
 
-1. Validate that the caller's answer is appropriate and complete
+1. Understand the caller's response in context
 2. Determine if we should proceed to the next question or ask for clarification
-3. Provide a brief summary of their answer for context
+3. Provide a brief summary of what they shared
 
-IMPORTANT: Be lenient with natural speech patterns. People often:
-- Repeat themselves when speaking on the phone
-- Use filler words like "um", "uh", "you know"
+IMPORTANT: Be VERY lenient and conversational. People often:
+- Give contextual responses that make sense in conversation
+- Don't answer questions exactly as asked (this is normal!)
+- Share related information that's valuable
+- Use natural speech patterns and filler words
 - Restate things for clarity
-- Have slight variations in how they express themselves
 
 Current question: ${question.prompt}
 Caller's answer: ${answer}
@@ -79,7 +80,7 @@ ${contextSummary}
 Respond in JSON format:
 {
   "valid": true/false,
-  "summary": "Brief summary of their answer (extract the key information)",
+  "summary": "Brief summary of what they shared (extract the key information)",
   "should_proceed": true/false,
   "next_question_id": "q2" or null,
   "feedback": "Optional feedback or clarification request (only if truly needed)",
@@ -87,10 +88,12 @@ Respond in JSON format:
 }
 
 Guidelines:
-- If the answer contains the requested information (even with repetition), mark as valid
-- Only ask for clarification if the answer is completely unclear or missing key information
-- Extract the core meaning from natural speech patterns
-- Be encouraging and supportive, not overly critical`;
+- If the answer is ANYTHING reasonable or related, mark as valid
+- Only ask for clarification if the answer is completely incomprehensible
+- Accept contextual responses, partial answers, and related information
+- Remember: this is a conversation, not a test
+- Be encouraging and supportive, not critical
+- If they're sharing stories or memories, that's perfect - continue!`;
 
       const completion = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -104,6 +107,16 @@ Guidelines:
       });
 
       const analysis = JSON.parse(completion.choices[0].message.content);
+      
+      // Safety check: if AI is being too strict, automatically continue
+      if (!analysis.valid && analysis.feedback && analysis.feedback.toLowerCase().includes('name')) {
+        console.log('🔄 AI being too strict about name requirement, overriding to continue...');
+        analysis.valid = true;
+        analysis.should_proceed = true;
+        analysis.next_question_id = question.next;
+        analysis.feedback = null;
+        analysis.reasoning = 'Overridden: AI was too strict, accepting contextual response';
+      }
       
       console.log(`✅ AI analysis completed:`, {
         valid: analysis.valid,
@@ -168,6 +181,95 @@ Generate a 2-3 sentence summary that captures the essence of their stories and m
       console.error('❌ Failed to generate conversation summary:', error);
       return 'Thank you for sharing your family stories and memories with us today.';
     }
+  }
+
+  /**
+   * Generate dynamic, contextual questions based on conversation content
+   */
+  async generateDynamicQuestion(conversationContext, currentStory, flow) {
+    try {
+      if (!this.openai) {
+        throw new Error('OpenAI client not configured. Set OPENAI_API_KEY.');
+      }
+
+      console.log(`🧠 Generating dynamic question based on story context...`);
+
+      const contextSummary = flow.getConversationSummary(conversationContext);
+      
+      const systemPrompt = `You are a warm, engaging interviewer helping someone share their family stories and memories. 
+
+Your role is to generate ONE natural, contextual question that will help them continue sharing their story.
+
+What they've shared so far:
+${contextSummary}
+
+Current story/memory they're telling:
+${currentStory}
+
+Generate a question that:
+- Feels natural and conversational (not like an interview)
+- Builds on what they just shared
+- Encourages them to continue their story
+- Shows genuine interest and curiosity
+- Is specific to their experience
+
+Examples of good questions:
+- "That sounds amazing! What happened next?"
+- "How did that make you feel at the time?"
+- "What was your grandmother like? She sounds wonderful."
+- "That must have been challenging. How did you get through it?"
+- "Can you tell me more about that moment?"
+
+Respond with just the question - no JSON, no explanation, just the natural question.`;
+
+      const completion = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: 'Generate a natural follow-up question based on their story.' }
+        ],
+        temperature: 0.7, // Higher temperature for more creative, natural questions
+        max_tokens: 100
+      });
+
+      const question = completion.choices[0].message.content.trim();
+      
+      console.log(`✅ Dynamic question generated: "${question}"`);
+      
+      return question;
+
+    } catch (error) {
+      console.error('❌ Failed to generate dynamic question:', error);
+      
+      // Fallback to generic but warm questions
+      const fallbackQuestions = [
+        "That's wonderful! Can you tell me more about that?",
+        "What happened next in your story?",
+        "How did that experience shape you?",
+        "What was the most meaningful part of that memory?",
+        "Can you share another story with me?"
+      ];
+      
+      const randomQuestion = fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
+      console.log(`🔄 Using fallback question: "${randomQuestion}"`);
+      
+      return randomQuestion;
+    }
+  }
+
+  /**
+   * Determine if we should use dynamic questions or continue with scripted ones
+   */
+  shouldUseDynamicQuestions(conversationContext, currentQuestionId) {
+    // Use dynamic questions after the first 2-3 foundation questions
+    const foundationQuestions = ['q1', 'q2', 'q3'];
+    const hasFoundation = foundationQuestions.some(q => 
+      conversationContext.answers && conversationContext.answers[q]
+    );
+    
+    const isPastFoundation = !foundationQuestions.includes(currentQuestionId);
+    
+    return hasFoundation && isPastFoundation;
   }
 
   /**
