@@ -117,52 +117,6 @@ Respond in JSON format:
   }
 
   /**
-   * Generate personalized follow-up question
-   */
-  async generatePersonalizedQuestion(baseQuestion, conversationContext, flow) {
-    try {
-      if (!this.openai) {
-        throw new Error('OpenAI client not configured. Set OPENAI_API_KEY.');
-      }
-
-      console.log(`🎯 Generating personalized question based on context`);
-
-      const contextSummary = flow.getConversationSummary(conversationContext);
-      
-      const systemPrompt = `You are helping to conduct a family story interview. Based on what the caller has shared so far, personalize the next question to make it more engaging and relevant.
-
-Base question: ${baseQuestion.prompt}
-
-What they've shared so far:
-${contextSummary}
-
-Generate a personalized version of the base question that references something they mentioned. Keep it warm, engaging, and natural.
-
-Respond with just the personalized question text, no JSON or formatting.`;
-
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Personalize this question based on their context.' }
-        ],
-        temperature: 0.7, // Slightly higher for creativity
-        max_tokens: 150
-      });
-
-      const personalizedQuestion = completion.choices[0].message.content.trim();
-      
-      console.log(`✅ Personalized question generated: "${personalizedQuestion.substring(0, 100)}..."`);
-      
-      return personalizedQuestion;
-
-    } catch (error) {
-      console.error('❌ Failed to generate personalized question:', error);
-      return baseQuestion.prompt; // Fallback to original question
-    }
-  }
-
-  /**
    * Generate conversation summary
    */
   async generateConversationSummary(conversationContext, flow) {
@@ -208,37 +162,18 @@ Generate a 2-3 sentence summary that captures the essence of their stories and m
    * Check if OpenAI is available
    */
   isAvailable() {
-    return this.openai !== null;
+    return !!this.openai && !!this.apiKey;
   }
 
   /**
-   * Get API status
+   * Get status information
    */
-  async getStatus() {
-    try {
-      if (!this.openai) {
-        return { available: false, error: 'API key not configured' };
-      }
-
-      // Test with a simple completion
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [{ role: 'user', content: 'Hello' }],
-        max_tokens: 5
-      });
-
-      return { 
-        available: true, 
-        model: 'gpt-4o-mini',
-        whisper: true
-      };
-
-    } catch (error) {
-      return { 
-        available: false, 
-        error: error.message 
-      };
-    }
+  getStatus() {
+    return {
+      available: this.isAvailable(),
+      hasApiKey: !!this.apiKey,
+      hasClient: !!this.openai
+    };
   }
 }
 
