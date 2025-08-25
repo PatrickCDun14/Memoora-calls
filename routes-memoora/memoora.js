@@ -4,7 +4,7 @@ const axios = require('axios');
 const path = require('path');
 const express = require('express');
 const router = express.Router();
-const { VoiceResponse } = require('twilio').twiml;
+const { VoiceResponse } = require('twilio/lib/twiml/VoiceResponse');
 const twilio = require('twilio');
 const { notifyAppBackend } = require('../utils/notifyAppBackend');
 const { 
@@ -333,18 +333,18 @@ router.all('/voice', async (req, res) => {
       
       // This is a basic call, use pre-recorded audio
       console.log('🎙️  Using basic voice with pre-recorded audio');
-      const twiml = new VoiceResponse();
+    const twiml = new VoiceResponse();
       twiml.play(`${process.env.BASE_URL}/api/v1/audio/personal-greeting.mp3`);
       
-      twiml.record({
-        action: `${process.env.BASE_URL}/api/v1/handle-recording`,
-        method: 'POST',
-        maxLength: process.env.MAX_RECORDING_DURATION || 120,
-        finishOnKey: '#',
+    twiml.record({
+      action: `${process.env.BASE_URL}/api/v1/handle-recording`,
+      method: 'POST',
+      maxLength: process.env.MAX_RECORDING_DURATION || 120,
+      finishOnKey: '#',
         playBeep: false
-      });
-      res.type('text/xml');
-      res.send(twiml.toString());
+    });
+    res.type('text/xml');
+    res.send(twiml.toString());
       
     } catch (error) {
       console.error('❌ Error in voice webhook, falling back to basic voice:', error);
@@ -563,7 +563,9 @@ router.post('/interactive/start', async (req, res) => {
     const TwilioHelpers = require('../src/twilio');
     const twilio = new TwilioHelpers();
     
+    console.log('🎭 Generating TwiML for first question:', firstQuestion);
     const twiml = twilio.generateConversationStart(firstQuestion, process.env.BASE_URL);
+    console.log('✅ TwiML generated successfully');
     
     res.type('text/xml');
     res.send(twiml);
@@ -572,6 +574,7 @@ router.post('/interactive/start', async (req, res) => {
     console.error('❌ Error starting interactive conversation:', error);
     
     // Fallback to basic voice
+    const { VoiceResponse } = require('twilio/lib/twiml/VoiceResponse');
     const fallbackTwiml = new VoiceResponse();
     fallbackTwiml.say('Hello! Welcome to Memoora. Please share your story.');
     fallbackTwiml.record({
@@ -613,7 +616,9 @@ router.post('/interactive/handle-recording', async (req, res) => {
     // Transcribe with Whisper
     const OpenAIHelpers = require('../src/openai');
     const openai = new OpenAIHelpers();
+    console.log('🎙️ Starting Whisper transcription...');
     const transcript = await openai.transcribeAudio(filepath);
+    console.log('✅ Whisper transcription completed');
 
     console.log(`📝 Transcript: "${transcript.substring(0, 100)}..."`);
 
@@ -1051,7 +1056,7 @@ router.post('/call',
     // Track API key usage
     const apiKeyService = require('../utils/api-key-service');
     await apiKeyService.incrementUsage(req.apiKey, 'call');
-    
+
     console.log(`📲 Call initiated to ${targetNumber}`);
     console.log(`🆔 Call SID: ${call.sid}`);
     console.log(`📊 Initial Status: ${call.status}`);
