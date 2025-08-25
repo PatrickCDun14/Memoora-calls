@@ -4,7 +4,6 @@ const axios = require('axios');
 const path = require('path');
 const express = require('express');
 const router = express.Router();
-const { VoiceResponse } = require('twilio/lib/twiml/VoiceResponse');
 const twilio = require('twilio');
 const { notifyAppBackend } = require('../utils/notifyAppBackend');
 const { 
@@ -303,7 +302,7 @@ router.all('/voice', async (req, res) => {
       if (error || !calls || calls.length === 0) {
         console.log('⚠️  No call record found, using basic voice');
         // Fall back to basic voice if no call record found
-        const basicTwiml = new VoiceResponse();
+        const basicTwiml = new twilio.twiml.VoiceResponse();
         basicTwiml.play(`${process.env.BASE_URL}/api/v1/audio/personal-greeting.mp3`);
         basicTwiml.record({
           action: `${process.env.BASE_URL}/api/v1/handle-recording`,
@@ -325,7 +324,7 @@ router.all('/voice', async (req, res) => {
         console.log(`❓ Question: "${question}"`);
         
         // Redirect to the interactive voice handler
-        const interactiveTwiml = new VoiceResponse();
+        const interactiveTwiml = new twilio.twiml.VoiceResponse();
         interactiveTwiml.redirect(`${process.env.BASE_URL}/api/v1/voice-interactive`);
         res.type('text/xml');
         return res.send(interactiveTwiml.toString());
@@ -333,7 +332,7 @@ router.all('/voice', async (req, res) => {
       
       // This is a basic call, use pre-recorded audio
       console.log('🎙️  Using basic voice with pre-recorded audio');
-    const twiml = new VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
       twiml.play(`${process.env.BASE_URL}/api/v1/audio/personal-greeting.mp3`);
       
     twiml.record({
@@ -350,7 +349,7 @@ router.all('/voice', async (req, res) => {
       console.error('❌ Error in voice webhook, falling back to basic voice:', error);
       
       // Fall back to basic voice on error
-      const fallbackTwiml = new VoiceResponse();
+      const fallbackTwiml = new twilio.twiml.VoiceResponse();
       fallbackTwiml.play(`${process.env.BASE_URL}/api/v1/audio/personal-greeting.mp3`);
       
       fallbackTwiml.record({
@@ -391,7 +390,7 @@ router.all('/voice-interactive', async (req, res) => {
       if (error || !calls || calls.length === 0) {
         console.log('⚠️  No call record found, falling back to basic voice');
         // Fall back to basic voice if no call record found
-        const basicTwiml = new VoiceResponse();
+        const basicTwiml = new twilio.twiml.VoiceResponse();
         basicTwiml.say('Hello! Welcome to Memoora. Please share your story.');
         basicTwiml.record({
           action: `${process.env.BASE_URL}/api/v1/handle-recording`,
@@ -410,7 +409,7 @@ router.all('/voice-interactive', async (req, res) => {
       if (!question) {
         console.log('⚠️  No question found in call record, falling back to basic voice');
         // Fall back to basic voice if no question
-        const basicTwiml = new VoiceResponse();
+        const basicTwiml = new twilio.twiml.VoiceResponse();
         basicTwiml.say('Hello! Welcome to Memoora. Please share your story.');
         basicTwiml.record({
           action: `${process.env.BASE_URL}/api/v1/handle-recording`,
@@ -473,7 +472,7 @@ router.all('/voice-interactive', async (req, res) => {
       }
       
       // Create interactive TwiML
-      const twiml = new VoiceResponse();
+      const twiml = new twilio.twiml.VoiceResponse();
       
       // Welcome message
       twiml.say({
@@ -513,7 +512,7 @@ router.all('/voice-interactive', async (req, res) => {
       console.error('❌ Error in interactive voice webhook:', error);
       
       // Fall back to basic voice on error
-      const fallbackTwiml = new VoiceResponse();
+      const fallbackTwiml = new twilio.twiml.VoiceResponse();
       fallbackTwiml.say('Hello! Welcome to Memoora. Please share your story.');
       fallbackTwiml.record({
         action: `${process.env.BASE_URL}/api/v1/handle-recording`,
@@ -574,8 +573,7 @@ router.post('/interactive/start', async (req, res) => {
     console.error('❌ Error starting interactive conversation:', error);
     
     // Fallback to basic voice
-    const { VoiceResponse } = require('twilio/lib/twiml/VoiceResponse');
-    const fallbackTwiml = new VoiceResponse();
+    const fallbackTwiml = new twilio.twiml.VoiceResponse();
     fallbackTwiml.say('Hello! Welcome to Memoora. Please share your story.');
     fallbackTwiml.record({
       action: `${process.env.BASE_URL}/api/v1/handle-recording`,
@@ -950,7 +948,7 @@ router.post('/handle-recording', async (req, res) => {
       }
     }, 7000);
   
-    const twiml = new VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     twiml.say('Thanks! Your story has been saved.');
     res.type('text/xml');
     res.send(twiml.toString());

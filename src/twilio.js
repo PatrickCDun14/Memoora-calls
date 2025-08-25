@@ -1,6 +1,6 @@
 // src/twilio.js
 const twilio = require('twilio');
-const { VoiceResponse } = require('twilio/lib/twiml/VoiceResponse');
+const twilio = require('twilio');
 const axios = require('axios');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
@@ -16,7 +16,7 @@ class TwilioHelpers {
    * Generate TwiML for starting a conversation
    */
   generateConversationStart(question, baseUrl) {
-    const twiml = new VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     // Welcome message
     twiml.say({
@@ -56,7 +56,7 @@ class TwilioHelpers {
    * Generate TwiML for continuing conversation
    */
   generateConversationContinue(question, baseUrl) {
-    const twiml = new VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     // Ask the next question
     twiml.say({
@@ -81,7 +81,7 @@ class TwilioHelpers {
    * Generate TwiML for conversation end
    */
   generateConversationEnd(closingMessage) {
-    const twiml = new VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     // Say closing message
     twiml.say({
@@ -99,7 +99,7 @@ class TwilioHelpers {
    * Generate TwiML for error/retry
    */
   generateRetryMessage(message, baseUrl) {
-    const twiml = new VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     twiml.say({
       voice: 'alice',
@@ -212,7 +212,7 @@ class TwilioHelpers {
    * Generate TwiML for testing
    */
   generateTestTwiML() {
-    const twiml = new VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     twiml.say({
       voice: 'alice',
