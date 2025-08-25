@@ -561,7 +561,8 @@ router.all('/interactive/start', async (req, res) => {
       conversation_start: new Date().toISOString(),
       answers: {},
       context: {},
-      last_updated: new Date().toISOString()
+      last_updated: new Date().toISOString(),
+      full_conversation_audio: null // Will store the complete conversation recording
     };
     
     await state.setState(req.body.CallSid, initialState);
@@ -576,14 +577,16 @@ router.all('/interactive/start', async (req, res) => {
       language: 'en-US'
     }, firstQuestion.prompt);
     
-    // Record their answer
+    // Record their answer with real-time transcription
     twiml.record({
-      action: `${process.env.BASE_URL}/api/v1/interactive/handle-recording`,
+      action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
       method: 'POST',
       maxLength: 60,
       finishOnKey: '#',
       playBeep: false,
-      trim: 'trim-silence'
+      trim: 'trim-silence',
+      transcribe: true,
+      transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
     });
     
     console.log('✅ First question TwiML generated successfully');
@@ -598,11 +601,13 @@ router.all('/interactive/start', async (req, res) => {
     const fallbackTwiml = new twilio.twiml.VoiceResponse();
     fallbackTwiml.say('Hello! Welcome to Memoora. Please share your story.');
     fallbackTwiml.record({
-      action: `${process.env.BASE_URL}/api/v1/handle-recording`,
+      action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
       method: 'POST',
       maxLength: 60,
       finishOnKey: '#',
-      playBeep: false
+      playBeep: false,
+      transcribe: true,
+      transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
     });
     
     res.type('text/xml');
@@ -610,52 +615,38 @@ router.all('/interactive/start', async (req, res) => {
   }
 });
 
-// Route 2: Handle recording and continue conversation
-router.post('/interactive/handle-recording', async (req, res) => {
-  console.log('🎭 Interactive Phone Bot - Handling Recording');
-  console.log('=============================================');
+// Route 2: Handle real-time transcription webhook from Twilio
+router.post('/interactive/transcription-webhook', async (req, res) => {
+  console.log('🎭 Interactive Phone Bot - Transcription Webhook');
+  console.log('================================================');
   console.log(`📱 Call SID: ${req.body.CallSid || 'N/A'}`);
-  console.log(`🎵 Recording URL: ${req.body.RecordingUrl || 'N/A'}`);
-  console.log(`⏱️  Duration: ${req.body.RecordingDuration || 'N/A'} seconds`);
+  console.log(`📝 Transcription: ${req.body.TranscriptionText || 'N/A'}`);
+  console.log(`📊 Confidence: ${req.body.TranscriptionStatus || 'N/A'}`);
   console.log(`🕐 Time: ${new Date().toISOString()}`);
-  console.log('=============================================');
+  console.log('================================================');
 
   try {
     const callSid = req.body.CallSid;
-    const recordingUrl = req.body.RecordingUrl;
+    const transcription = req.body.TranscriptionText;
+    const status = req.body.TranscriptionStatus;
 
-    if (!recordingUrl) {
-      throw new Error('No recording URL provided');
+    if (!transcription || status !== 'completed') {
+      console.log('⏳ Transcription not ready yet or failed');
+      res.sendStatus(200); // Acknowledge webhook
+      return;
     }
-
-    // Download recording
-    const TwilioHelpers = require('../src/twilio');
-    const twilio = new TwilioHelpers();
-    
-    // Check if recording is available first
-    console.log('🔍 Checking recording availability...');
-    const isAvailable = await twilio.checkRecordingAvailability(recordingUrl);
-    
-    if (!isAvailable) {
-      console.log('⏳ Recording not ready yet, waiting...');
-      // Wait a bit for the recording to be processed
-      await new Promise(resolve => setTimeout(resolve, 3000));
-    }
-    
-    console.log('⬇️ Starting recording download...');
-    const { filepath } = await twilio.downloadRecording(recordingUrl, callSid);
-
-    // Transcribe with Whisper
-    const OpenAIHelpers = require('../src/openai');
-    const openai = new OpenAIHelpers();
-    console.log('🎙️ Starting Whisper transcription...');
-    const transcript = await openai.transcribeAudio(filepath);
-    console.log('✅ Whisper transcription completed:', transcript.substring(0, 100));
 
     // Get conversation state
     const ConversationState = require('../src/state');
     const state = new ConversationState();
     const conversationState = await state.getState(callSid);
+    
+    if (!conversationState) {
+      console.log('❌ No conversation state found for call:', callSid);
+      res.sendStatus(200);
+      return;
+    }
+
     console.log('✅ Conversation state retrieved:', conversationState);
 
     // Get current question
@@ -668,16 +659,19 @@ router.post('/interactive/handle-recording', async (req, res) => {
 
     // Analyze answer with GPT-4o-mini
     console.log('🧠 Starting AI analysis with GPT-4o-mini...');
+    const OpenAIHelpers = require('../src/openai');
+    const openai = new OpenAIHelpers();
+    
     const analysis = await openai.analyzeAnswerAndDetermineNext(
       currentQuestion, 
-      transcript, 
+      transcription, 
       conversationState, 
       flow
     );
     console.log('✅ AI analysis completed:', analysis);
 
     // Add answer to state
-    await state.addAnswer(callSid, currentQuestion.id, transcript, analysis.summary);
+    await state.addAnswer(callSid, currentQuestion.id, transcription, analysis.summary);
     console.log('✅ Answer added to conversation state');
 
     // Determine next action
@@ -700,12 +694,14 @@ router.post('/interactive/handle-recording', async (req, res) => {
         }, processedPrompt);
         
         twiml.record({
-          action: `${process.env.BASE_URL}/api/v1/interactive/handle-recording`,
+          action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
           method: 'POST',
           maxLength: 60,
           finishOnKey: '#',
           playBeep: false,
-          trim: 'trim-silence'
+          trim: 'trim-silence',
+          transcribe: true,
+          transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
         });
         
         res.type('text/xml');
@@ -740,12 +736,14 @@ router.post('/interactive/handle-recording', async (req, res) => {
       }, analysis.feedback);
       
       twiml.record({
-        action: `${process.env.BASE_URL}/api/v1/interactive/handle-recording`,
+        action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
         method: 'POST',
         maxLength: 60,
         finishOnKey: '#',
         playBeep: false,
-        trim: 'trim-silence'
+        trim: 'trim-silence',
+          transcribe: true,
+          transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
       });
       
       res.type('text/xml');
@@ -767,12 +765,14 @@ router.post('/interactive/handle-recording', async (req, res) => {
         }, processedPrompt);
         
         twiml.record({
-          action: `${process.env.BASE_URL}/api/v1/interactive/handle-recording`,
+          action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
           method: 'POST',
           maxLength: 60,
           finishOnKey: '#',
           playBeep: false,
-          trim: 'trim-silence'
+          trim: 'trim-silence',
+          transcribe: true,
+          transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
         });
         
         res.type('text/xml');
@@ -790,17 +790,214 @@ router.post('/interactive/handle-recording', async (req, res) => {
     }
 
   } catch (error) {
-    console.error('❌ Error handling interactive recording:', error);
+    console.error('❌ Error handling transcription webhook:', error);
     
     // Fallback: ask them to try again
     const fallbackTwiml = new twilio.twiml.VoiceResponse();
     fallbackTwiml.say('I had trouble processing that. Could you please try again?');
     fallbackTwiml.record({
-      action: `${process.env.BASE_URL}/api/v1/interactive/handle-recording`,
+      action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
       method: 'POST',
       maxLength: 60,
       finishOnKey: '#',
-      playBeep: false
+      playBeep: false,
+      transcribe: true,
+      transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+    });
+    
+    res.type('text/xml');
+    res.send(fallbackTwiml.toString());
+  }
+});
+
+// Route 2: Handle real-time transcription webhook from Twilio
+router.post('/interactive/transcription-webhook', async (req, res) => {
+  console.log('🎭 Interactive Phone Bot - Transcription Webhook');
+  console.log('================================================');
+  console.log(`📱 Call SID: ${req.body.CallSid || 'N/A'}`);
+  console.log(`📝 Transcription: ${req.body.TranscriptionText || 'N/A'}`);
+  console.log(`📊 Confidence: ${req.body.TranscriptionStatus || 'N/A'}`);
+  console.log(`🕐 Time: ${new Date().toISOString()}`);
+  console.log('================================================');
+
+  try {
+    const callSid = req.body.CallSid;
+    const transcription = req.body.TranscriptionText;
+    const status = req.body.TranscriptionStatus;
+
+    if (!transcription || status !== 'completed') {
+      console.log('⏳ Transcription not ready yet or failed');
+      res.sendStatus(200); // Acknowledge webhook
+      return;
+    }
+
+    // Get conversation state
+    const ConversationState = require('../src/state');
+    const state = new ConversationState();
+    const conversationState = await state.getState(callSid);
+    
+    if (!conversationState) {
+      console.log('❌ No conversation state found for call:', callSid);
+      res.sendStatus(200);
+      return;
+    }
+
+    console.log('✅ Conversation state retrieved:', conversationState);
+
+    // Get current question
+    const ConversationFlow = require('../src/flow');
+    const flow = new ConversationFlow();
+    await flow.loadQuestions();
+    
+    const currentQuestion = flow.getQuestion(conversationState.current_question);
+    console.log('✅ Current question retrieved:', currentQuestion);
+
+    // Analyze answer with GPT-4o-mini
+    console.log('🧠 Starting AI analysis with GPT-4o-mini...');
+    const OpenAIHelpers = require('../src/openai');
+    const openai = new OpenAIHelpers();
+    
+    const analysis = await openai.analyzeAnswerAndDetermineNext(
+      currentQuestion, 
+      transcription, 
+      conversationState, 
+      flow
+    );
+    console.log('✅ AI analysis completed:', analysis);
+
+    // Add answer to state
+    await state.addAnswer(callSid, currentQuestion.id, transcription, analysis.summary);
+    console.log('✅ Answer added to conversation state');
+
+    // Determine next action
+    if (analysis.should_proceed && analysis.next_question_id) {
+      // Get next question
+      const nextQuestion = flow.getQuestion(analysis.next_question_id);
+      
+      if (nextQuestion && nextQuestion.type !== 'closing') {
+        // Continue conversation
+        console.log('🔄 Continuing conversation with next question:', nextQuestion.id);
+        
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        // Process prompt with context variables
+        const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
+        
+        twiml.say({
+          voice: 'alice',
+          language: 'en-US'
+        }, processedPrompt);
+        
+        twiml.record({
+          action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+          method: 'POST',
+          maxLength: 60,
+          finishOnKey: '#',
+          playBeep: false,
+          trim: 'trim-silence',
+          transcribe: true,
+          transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+        });
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+        
+      } else {
+        // End conversation
+        console.log('🎉 Ending conversation with closing message');
+        
+        const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        twiml.say({
+          voice: 'alice',
+          language: 'en-US'
+        }, closingMessage);
+        
+        twiml.hangup();
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+      }
+    } else if (analysis.feedback) {
+      // Ask for clarification
+      console.log('❓ Asking for clarification:', analysis.feedback);
+      
+      const twiml = new twilio.twiml.VoiceResponse();
+      
+      twiml.say({
+        voice: 'alice',
+        language: 'en-US'
+      }, analysis.feedback);
+      
+      twiml.record({
+        action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+        method: 'POST',
+        maxLength: 60,
+        finishOnKey: '#',
+        playBeep: false,
+        trim: 'trim-silence',
+        transcribe: true,
+        transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+      });
+      
+      res.type('text/xml');
+      res.send(twiml.toString());
+      
+    } else {
+      // Fallback: continue to next question
+      console.log('🔄 Fallback: continuing to next question');
+      
+      const nextQuestion = flow.getNextQuestion(currentQuestion.id, conversationState.context);
+      if (nextQuestion) {
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
+        
+        twiml.say({
+          voice: 'alice',
+          language: 'en-US'
+        }, processedPrompt);
+        
+        twiml.record({
+          action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+          method: 'POST',
+          maxLength: 60,
+          finishOnKey: '#',
+          playBeep: false,
+          trim: 'trim-silence',
+          transcribe: true,
+          transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+        });
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+        
+      } else {
+        // End conversation
+        const twiml = new twilio.twiml.VoiceResponse();
+        twiml.say('Thank you for sharing your stories with us today.');
+        twiml.hangup();
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error handling transcription webhook:', error);
+    
+    // Fallback: ask them to try again
+    const fallbackTwiml = new twilio.twiml.VoiceResponse();
+    fallbackTwiml.say('I had trouble processing that. Could you please try again?');
+    fallbackTwiml.record({
+      action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+      method: 'POST',
+      maxLength: 60,
+      finishOnKey: '#',
+      playBeep: false,
+      transcribe: true,
+      transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
     });
     
     res.type('text/xml');
@@ -1107,7 +1304,7 @@ router.post('/call',
     console.log(`📞 Call attempt from API key: ${req.apiKeyInfo.key} to: ${targetNumber}`);
     
     // Log call initiation details
-    console.log('🚀 Initiating Call');
+    console.log('�� Initiating Call');
     console.log('==================');
     console.log(`📱 Target Number: ${targetNumber}`);
     console.log(`📞 Twilio Number: ${process.env.TWILIO_PHONE_NUMBER}`);
@@ -1963,5 +2160,64 @@ function isAdminApiKey(apiKey) {
   
   return adminKeys.includes(apiKey);
 }
+
+// Route 3: Handle final conversation recording (for archiving)
+router.post('/interactive/handle-transcription', async (req, res) => {
+  console.log('🎭 Interactive Phone Bot - Final Recording Handler');
+  console.log('================================================');
+  console.log(`📱 Call SID: ${req.body.CallSid || 'N/A'}`);
+  console.log(`🎵 Recording URL: ${req.body.RecordingUrl || 'N/A'}`);
+  console.log(`⏱️  Duration: ${req.body.RecordingDuration || 'N/A'} seconds`);
+  console.log(`🕐 Time: ${new Date().toISOString()}`);
+  console.log('================================================');
+
+  try {
+    const callSid = req.body.CallSid;
+    const recordingUrl = req.body.RecordingUrl;
+
+    if (recordingUrl) {
+      // This is the final recording - save it for archiving
+      console.log('💾 Saving final conversation recording for archiving...');
+      
+      const TwilioHelpers = require('../src/twilio');
+      const twilio = new TwilioHelpers();
+      
+      // Download the final complete recording
+      const { filepath } = await twilio.downloadRecording(recordingUrl, callSid);
+      
+      // Update conversation state with the final audio file
+      const ConversationState = require('../src/state');
+      const state = new ConversationState();
+      await state.updateState(callSid, {
+        full_conversation_audio: filepath,
+        conversation_end: new Date().toISOString()
+      });
+      
+      console.log('✅ Final conversation recording saved:', filepath);
+    }
+
+    // Generate final TwiML response
+    const twiml = new twilio.twiml.VoiceResponse();
+    
+    // This route is called after the conversation ends
+    // Just acknowledge and hang up
+    twiml.say('Thank you for sharing your stories with us today.');
+    twiml.hangup();
+    
+    res.type('text/xml');
+    res.send(twiml.toString());
+
+  } catch (error) {
+    console.error('❌ Error handling final recording:', error);
+    
+    // Simple fallback
+    const fallbackTwiml = new twilio.twiml.VoiceResponse();
+    fallbackTwiml.say('Thank you for sharing your stories with us today.');
+    fallbackTwiml.hangup();
+    
+    res.type('text/xml');
+    res.send(fallbackTwiml.toString());
+  }
+});
 
 module.exports = router;
