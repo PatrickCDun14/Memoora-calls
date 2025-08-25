@@ -569,6 +569,13 @@ router.all('/interactive/start', async (req, res) => {
     
     await state.setState(req.body.CallSid, initialState);
     console.log('✅ Conversation state initialized');
+    
+    // Verify state was saved correctly
+    const savedState = await state.getState(req.body.CallSid);
+    console.log('🔍 State verification after save:');
+    console.log('- CallSid used for save:', req.body.CallSid);
+    console.log('- State found after save:', savedState ? 'YES' : 'NO');
+    console.log('- Saved state content:', savedState);
 
     // Generate TwiML for first question
     const twiml = new twilio.twiml.VoiceResponse();
