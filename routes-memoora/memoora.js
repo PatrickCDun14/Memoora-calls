@@ -763,8 +763,12 @@ async function continueConversation(callSid, transcript) {
     if (nextQuestionId && nextQuestionId !== 'end') {
       console.log('🔄 Triggering next question:', nextQuestionId);
       
-      // Check if we should use dynamic questions
-      if (flow.shouldUseDynamicQuestions(conversationState, nextQuestionId)) {
+            // Check if we should use dynamic questions
+      console.log(`🔍 Question flow decision for: ${nextQuestionId}`);
+      const shouldUseDynamic = flow.shouldUseDynamicQuestions(conversationState, nextQuestionId);
+      console.log(`🔍 Should use dynamic questions: ${shouldUseDynamic}`);
+      
+      if (shouldUseDynamic) {
         console.log('🧠 Using dynamic question generation...');
         
         // Generate a dynamic question based on context
@@ -799,6 +803,7 @@ async function continueConversation(callSid, transcript) {
         
       } else {
         // Use scripted question
+        console.log('📜 Using scripted question:', nextQuestionId);
         const nextQuestion = flow.getQuestion(nextQuestionId);
         
         if (nextQuestion && nextQuestion.type !== 'closing') {

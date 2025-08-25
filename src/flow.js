@@ -171,15 +171,28 @@ class ConversationFlow {
    * Check if we should use dynamic questions based on conversation progress
    */
   shouldUseDynamicQuestions(conversationContext, currentQuestionId) {
-    // Use dynamic questions after the first 2-3 foundation questions
+    // Use dynamic questions after the first 3 foundation questions
     const foundationQuestions = ['q1', 'q2', 'q3'];
+    
+    // Check if we have answers to foundation questions
     const hasFoundation = foundationQuestions.some(q => 
       conversationContext.answers && conversationContext.answers[q]
     );
     
+    // Check if we're past the foundation questions
     const isPastFoundation = !foundationQuestions.includes(currentQuestionId);
     
-    return hasFoundation && isPastFoundation;
+    const shouldUseDynamic = hasFoundation && isPastFoundation;
+    
+    console.log(`🔍 Dynamic question check:`, {
+      currentQuestionId,
+      hasFoundation,
+      isPastFoundation,
+      shouldUseDynamic,
+      answers: conversationContext.answers || {}
+    });
+    
+    return shouldUseDynamic;
   }
 
   /**
