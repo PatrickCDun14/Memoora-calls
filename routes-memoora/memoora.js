@@ -2097,9 +2097,11 @@ function isAdminApiKey(apiKey) {
   return adminKeys.includes(apiKey);
 }
 
-// Route 3: Handle final conversation recording (for archiving)
+
+
+// Route 3: Handle recording and continue conversation immediately
 router.post('/interactive/handle-transcription', async (req, res) => {
-  console.log('🎭 Interactive Phone Bot - Final Recording Handler');
+  console.log('🎭 Interactive Phone Bot - Recording Handler (Immediate Continue)');
   console.log('================================================');
   console.log(`📱 Call SID: ${req.body.CallSid || 'N/A'}`);
   console.log(`🎵 Recording URL: ${req.body.RecordingUrl || 'N/A'}`);
@@ -2112,44 +2114,136 @@ router.post('/interactive/handle-transcription', async (req, res) => {
     const recordingUrl = req.body.RecordingUrl;
 
     if (recordingUrl) {
-      // This is the final recording - save it for archiving
-      console.log('💾 Saving final conversation recording for archiving...');
+      // Save the recording for archiving
+      console.log('💾 Saving conversation recording...');
       
       const TwilioHelpers = require('../src/twilio');
       const twilio = new TwilioHelpers();
       
-      // Download the final complete recording
+      // Download the recording
       const { filepath } = await twilio.downloadRecording(recordingUrl, callSid);
       
-      // Update conversation state with the final audio file
+      // Update conversation state with the recording
       const ConversationState = require('../src/state');
       const state = new ConversationState();
       await state.updateState(callSid, {
-        full_conversation_audio: filepath,
-        conversation_end: new Date().toISOString()
+        last_recording: filepath,
+        last_updated: new Date().toISOString()
       });
       
-      console.log('✅ Final conversation recording saved:', filepath);
+      console.log('✅ Recording saved:', filepath);
     }
 
-    // Generate final TwiML response
-    const twiml = new twilio.twiml.VoiceResponse();
+    // Get conversation state
+    const ConversationState = require('../src/state');
+    const state = new ConversationState();
+    const conversationState = await state.getState(callSid);
     
-    // This route is called after the conversation ends
-    // Just acknowledge and hang up
-    twiml.say('Thank you for sharing your stories with us today.');
-    twiml.hangup();
+    if (!conversationState) {
+      console.log('❌ No conversation state found for call:', callSid);
+      res.sendStatus(200);
+      return;
+    }
+
+    console.log('✅ Conversation state retrieved:', conversationState);
+
+    // Get current question
+    const ConversationFlow = require('../src/flow');
+    const flow = new ConversationFlow();
+    await flow.loadQuestions();
     
-    res.type('text/xml');
-    res.send(twiml.toString());
+    const currentQuestion = flow.getQuestion(conversationState.current_question);
+    console.log('✅ Current question retrieved:', currentQuestion);
+
+    // Since we're in the recording action callback, we need to continue immediately
+    // We'll use a simple approach: move to the next question
+    const nextQuestionId = currentQuestion.next;
+    
+    if (nextQuestionId && nextQuestionId !== 'end') {
+      // Continue conversation with next question
+      console.log('🔄 Continuing conversation with next question:', nextQuestionId);
+      
+      // Update state to next question
+      await state.updateState(callSid, {
+        current_question: nextQuestionId
+      });
+      
+      // Get the next question
+      const nextQuestion = flow.getQuestion(nextQuestionId);
+      
+      if (nextQuestion && nextQuestion.type !== 'closing') {
+        // Generate TwiML for the next question
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        // Process prompt with context variables
+        const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
+        
+        twiml.say({
+          voice: 'alice',
+          language: 'en-US'
+        }, processedPrompt);
+        
+        twiml.record({
+          action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+          method: 'POST',
+          maxLength: 60,
+          finishOnKey: '#',
+          playBeep: false,
+          trim: 'trim-silence',
+          transcribe: true,
+          transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+        });
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+        return;
+        
+      } else {
+        // End conversation
+        console.log('🎉 Ending conversation with closing message');
+        
+        const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        twiml.say({
+          voice: 'alice',
+          language: 'en-US'
+        }, closingMessage);
+        
+        twiml.hangup();
+        
+        res.type('text/xml');
+        res.send(twiml.toString());
+        return;
+      }
+    } else {
+      // End conversation
+      console.log('🎉 Conversation ending - no more questions');
+      
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.say('Thank you for sharing your stories with us today.');
+      twiml.hangup();
+      
+      res.type('text/xml');
+      res.send(twiml.toString());
+      return;
+    }
 
   } catch (error) {
-    console.error('❌ Error handling final recording:', error);
+    console.error('❌ Error handling recording:', error);
     
-    // Simple fallback
+    // Fallback: ask them to try again
     const fallbackTwiml = new twilio.twiml.VoiceResponse();
-    fallbackTwiml.say('Thank you for sharing your stories with us today.');
-    fallbackTwiml.hangup();
+    fallbackTwiml.say('I had trouble processing that. Could you please try again?');
+    fallbackTwiml.record({
+      action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+      method: 'POST',
+      maxLength: 60,
+      finishOnKey: '#',
+      playBeep: false,
+      transcribe: true,
+      transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+    });
     
     res.type('text/xml');
     res.send(fallbackTwiml.toString());
