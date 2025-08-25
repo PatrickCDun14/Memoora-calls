@@ -540,6 +540,8 @@ router.all('/interactive/start', async (req, res) => {
   console.log(`📞 From: ${req.body.From || 'N/A'}`);
   console.log(`📱 To: ${req.body.To || 'N/A'}`);
   console.log(`🕐 Start Time: ${new Date().toISOString()}`);
+  console.log('🔍 FULL REQUEST BODY DEBUG:');
+  console.log(JSON.stringify(req.body, null, 2));
   console.log('================================================');
 
   try {
@@ -633,6 +635,11 @@ router.post('/interactive/transcription-webhook', async (req, res) => {
     const status = req.body.TranscriptionStatus;
     const recordingUrl = req.body.RecordingUrl;
     const recordingSid = req.body.RecordingSid;
+    
+    console.log('🔍 CallSid Debug:');
+    console.log('- CallSid from body:', req.body.CallSid);
+    console.log('- CallSid variable:', callSid);
+    console.log('- All body keys:', Object.keys(req.body));
 
     // Log all possible transcription-related fields
     console.log('🔍 Transcription Debug Info:');
@@ -708,6 +715,12 @@ async function continueConversation(callSid, transcript) {
     // Get conversation state
     const ConversationState = require('../src/state');
     const state = new ConversationState();
+    
+    console.log('🔍 State lookup debug:');
+    console.log('- Looking for state with CallSid:', callSid);
+    console.log('- CallSid type:', typeof callSid);
+    console.log('- CallSid length:', callSid ? callSid.length : 'undefined');
+    
     const conversationState = await state.getState(callSid);
     
     if (!conversationState) {
