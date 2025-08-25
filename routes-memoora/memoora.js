@@ -667,9 +667,14 @@ router.post('/interactive/transcription-webhook', async (req, res) => {
           console.log('✅ Whisper transcription successful:', whisperTranscript.substring(0, 100));
           
           // Continue with conversation using Whisper transcript
-          await continueConversation(callSid, whisperTranscript);
+          const twiml = await continueConversation(callSid, whisperTranscript);
           
-          res.sendStatus(200);
+          if (twiml) {
+            res.type('text/xml');
+            res.send(twiml.toString());
+          } else {
+            res.sendStatus(200);
+          }
           return;
           
         } catch (fallbackError) {
@@ -682,8 +687,14 @@ router.post('/interactive/transcription-webhook', async (req, res) => {
     }
 
     // Continue with normal flow using Twilio transcription
-    await continueConversation(callSid, transcription);
-    res.sendStatus(200);
+    const twiml = await continueConversation(callSid, transcription);
+    
+    if (twiml) {
+      res.type('text/xml');
+      res.send(twiml.toString());
+    } else {
+      res.sendStatus(200);
+    }
 
   } catch (error) {
     console.error('❌ Error handling transcription webhook:', error);
@@ -731,8 +742,17 @@ async function continueConversation(callSid, transcript) {
     await state.addAnswer(callSid, currentQuestion.id, transcript, analysis.summary);
     console.log('✅ Answer added to conversation state');
 
+    // Determine next question
+    let nextQuestionId;
+    if (analysis.should_proceed && analysis.next_question_id) {
+      nextQuestionId = analysis.next_question_id;
+    } else if (analysis.should_proceed) {
+      nextQuestionId = currentQuestion.next;
+    } else {
+      nextQuestionId = 'end';
+    }
+
     // Update current question to next one
-    const nextQuestionId = analysis.next_question_id || analysis.should_proceed ? currentQuestion.next : 'end';
     await state.updateState(callSid, {
       current_question: nextQuestionId
     });
@@ -743,15 +763,82 @@ async function continueConversation(callSid, transcript) {
     if (nextQuestionId && nextQuestionId !== 'end') {
       console.log('🔄 Triggering next question:', nextQuestionId);
       
-      // We'll need to make a call to continue the conversation
-      // For now, log that we're ready for the next question
-      console.log('✅ Ready for next question. Call /interactive/continue to continue.');
+      // Get the next question
+      const nextQuestion = flow.getQuestion(nextQuestionId);
+      
+      if (nextQuestion && nextQuestion.type !== 'closing') {
+        // Continue conversation with next question
+        console.log('🔄 Continuing conversation with next question:', nextQuestion.id);
+        
+        // Generate TwiML for the next question
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        // Process prompt with context variables
+        const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
+        
+        twiml.say({
+          voice: 'alice',
+          language: 'en-US'
+        }, processedPrompt);
+        
+        twiml.record({
+          action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+          method: 'POST',
+          maxLength: 60,
+          finishOnKey: '#',
+          playBeep: false,
+          trim: 'trim-silence',
+          transcribe: true,
+          transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+        });
+        
+        // Return the TwiML so it can be sent to the user
+        return twiml;
+        
+      } else {
+        // End conversation
+        console.log('🎉 Ending conversation with closing message');
+        
+        const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        twiml.say({
+          voice: 'alice',
+          language: 'en-US'
+        }, closingMessage);
+        
+        twiml.hangup();
+        
+        return twiml;
+      }
     } else {
+      // End conversation
       console.log('🎉 Conversation ending - no more questions');
+      
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.say('Thank you for sharing your stories with us today.');
+      twiml.hangup();
+      
+      return twiml;
     }
 
   } catch (error) {
     console.error('❌ Error continuing conversation:', error);
+    
+    // Fallback: ask them to try again
+    const fallbackTwiml = new twilio.twiml.VoiceResponse();
+    fallbackTwiml.say('I had trouble processing that. Could you please try again?');
+    fallbackTwiml.record({
+      action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+      method: 'POST',
+      maxLength: 60,
+      finishOnKey: '#',
+      playBeep: false,
+      transcribe: true,
+      transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+    });
+    
+    return fallbackTwiml;
   }
 }
 

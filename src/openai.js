@@ -64,6 +64,12 @@ class OpenAIHelpers {
 2. Determine if we should proceed to the next question or ask for clarification
 3. Provide a brief summary of their answer for context
 
+IMPORTANT: Be lenient with natural speech patterns. People often:
+- Repeat themselves when speaking on the phone
+- Use filler words like "um", "uh", "you know"
+- Restate things for clarity
+- Have slight variations in how they express themselves
+
 Current question: ${question.prompt}
 Caller's answer: ${answer}
 
@@ -73,12 +79,18 @@ ${contextSummary}
 Respond in JSON format:
 {
   "valid": true/false,
-  "summary": "Brief summary of their answer",
+  "summary": "Brief summary of their answer (extract the key information)",
   "should_proceed": true/false,
   "next_question_id": "q2" or null,
-  "feedback": "Optional feedback or clarification request",
+  "feedback": "Optional feedback or clarification request (only if truly needed)",
   "reasoning": "Brief explanation of your decision"
-}`;
+}
+
+Guidelines:
+- If the answer contains the requested information (even with repetition), mark as valid
+- Only ask for clarification if the answer is completely unclear or missing key information
+- Extract the core meaning from natural speech patterns
+- Be encouraging and supportive, not overly critical`;
 
       const completion = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
