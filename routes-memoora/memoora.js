@@ -169,9 +169,9 @@ router.post('/interactive-call', async (req, res) => {
     const callData = {
       account_id: validationResult.accountId,
       api_key_id: validationResult.keyId,
-      phone_number: phoneValidation.formatted,
+      from_number: process.env.TWILIO_PHONE_NUMBER,
+      to_number: phoneValidation.formatted,
       twilio_call_sid: call.sid,
-      call_type: 'interactive',
       status: 'initiated',
       metadata: {
         ...metadata,

@@ -15,7 +15,7 @@ class TwilioHelpers {
    * Generate TwiML for starting a conversation
    */
   generateConversationStart(question, baseUrl) {
-    const twiml = new twilio.VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     // Welcome message
     twiml.say({
@@ -55,7 +55,7 @@ class TwilioHelpers {
    * Generate TwiML for continuing conversation
    */
   generateConversationContinue(question, baseUrl) {
-    const twiml = new twilio.VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     // Ask the next question
     twiml.say({
@@ -80,7 +80,7 @@ class TwilioHelpers {
    * Generate TwiML for conversation end
    */
   generateConversationEnd(closingMessage) {
-    const twiml = new twilio.VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     // Say closing message
     twiml.say({
@@ -98,7 +98,7 @@ class TwilioHelpers {
    * Generate TwiML for error/retry
    */
   generateRetryMessage(message, baseUrl) {
-    const twiml = new twilio.VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     twiml.say({
       voice: 'alice',
@@ -211,7 +211,7 @@ class TwilioHelpers {
    * Generate TwiML for testing
    */
   generateTestTwiML() {
-    const twiml = new twilio.VoiceResponse();
+    const twiml = new twilio.twiml.VoiceResponse();
     
     twiml.say({
       voice: 'alice',
