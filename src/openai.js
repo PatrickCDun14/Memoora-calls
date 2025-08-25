@@ -257,20 +257,8 @@ Respond with just the question - no JSON, no explanation, just the natural quest
     }
   }
 
-  /**
-   * Determine if we should use dynamic questions or continue with scripted ones
-   */
-  shouldUseDynamicQuestions(conversationContext, currentQuestionId) {
-    // Use dynamic questions after the first 2-3 foundation questions
-    const foundationQuestions = ['q1', 'q2', 'q3'];
-    const hasFoundation = foundationQuestions.some(q => 
-      conversationContext.answers && conversationContext.answers[q]
-    );
-    
-    const isPastFoundation = !foundationQuestions.includes(currentQuestionId);
-    
-    return hasFoundation && isPastFoundation;
-  }
+  // Note: shouldUseDynamicQuestions is now handled in src/flow.js
+  // This function was removed to avoid conflicts
 
   /**
    * Check if OpenAI is available
