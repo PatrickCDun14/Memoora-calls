@@ -752,9 +752,17 @@ async function continueConversation(callSid, transcript) {
       nextQuestionId = 'end';
     }
 
-    // Update current question to next one
+    // Update current question to next one IMMEDIATELY
     await state.updateState(callSid, {
       current_question: nextQuestionId
+    });
+    
+    // Verify the state was updated
+    const updatedState = await state.getState(callSid);
+    console.log('✅ State updated successfully:', {
+      old_question: conversationState.current_question,
+      new_question: nextQuestionId,
+      verified_state: updatedState.current_question
     });
 
     console.log('🔄 Conversation continued successfully, next question:', nextQuestionId);
@@ -765,7 +773,12 @@ async function continueConversation(callSid, transcript) {
       
             // Check if we should use dynamic questions
       console.log(`🔍 Question flow decision for: ${nextQuestionId}`);
-      const shouldUseDynamic = flow.shouldUseDynamicQuestions(conversationState, nextQuestionId);
+      
+      // Get the most up-to-date state for the decision
+      const currentState = await state.getState(callSid);
+      console.log('🔍 Current state for decision:', currentState);
+      
+      const shouldUseDynamic = flow.shouldUseDynamicQuestions(currentState, nextQuestionId);
       console.log(`🔍 Should use dynamic questions: ${shouldUseDynamic}`);
       
       if (shouldUseDynamic) {
