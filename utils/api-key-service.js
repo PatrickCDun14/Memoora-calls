@@ -1,12 +1,31 @@
 // utils/api-key-service.js
 const crypto = require('crypto');
-const supabase = require('../config/supabase');
+const { supabase, supabaseAdmin, testConnection } = require('../config/supabase');
 
 class ApiKeyService {
   constructor() {
     this.keys = new Map(); // In-memory cache for performance
     this.keyPrefix = 'mk_';
     this.keyLength = 32;
+    
+    // Test database connection on initialization
+    this.initializeConnection();
+  }
+
+  // ===== INITIALIZATION =====
+  
+  async initializeConnection() {
+    try {
+      const isConnected = await testConnection();
+      if (!isConnected) {
+        console.error('❌ Failed to initialize database connection');
+        throw new Error('Database connection failed');
+      }
+      console.log('✅ API Key Service initialized successfully');
+    } catch (error) {
+      console.error('❌ API Key Service initialization failed:', error.message);
+      throw error;
+    }
   }
 
   // ===== API KEY GENERATION =====

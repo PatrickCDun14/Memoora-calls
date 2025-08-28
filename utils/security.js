@@ -21,9 +21,17 @@ const validateApiKeyMiddleware = async (req, res, next) => {
       });
     }
 
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('API key validation timeout')), 10000); // 10 second timeout
+    });
+
     // Validate the API key using the service
     const apiKeyService = require('./api-key-service');
-    const validation = await apiKeyService.validateApiKey(apiKey);
+    const validationPromise = apiKeyService.validateApiKey(apiKey);
+    
+    // Race between validation and timeout
+    const validation = await Promise.race([validationPromise, timeoutPromise]);
     
     if (!validation.valid) {
       return res.status(401).json({ 
@@ -45,6 +53,14 @@ const validateApiKeyMiddleware = async (req, res, next) => {
     next();
   } catch (error) {
     console.error('❌ API key validation error:', error);
+    
+    if (error.message === 'API key validation timeout') {
+      return res.status(408).json({ 
+        error: 'Request timeout',
+        message: 'API key validation took too long. Please try again.'
+      });
+    }
+    
     return res.status(500).json({ 
       error: 'Validation error',
       message: 'Internal server error during API key validation'

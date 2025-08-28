@@ -82,7 +82,7 @@ Respond in JSON format:
   "valid": true/false,
   "summary": "Brief summary of what they shared (extract the key information)",
   "should_proceed": true/false,
-  "next_question_id": "q2" or null,
+  "next_question_id": null,
   "feedback": "Optional feedback or clarification request (only if truly needed)",
   "reasoning": "Brief explanation of your decision"
 }
@@ -93,7 +93,8 @@ Guidelines:
 - Accept contextual responses, partial answers, and related information
 - Remember: this is a conversation, not a test
 - Be encouraging and supportive, not critical
-- If they're sharing stories or memories, that's perfect - continue!`;
+- If they're sharing stories or memories, that's perfect - continue!
+- IMPORTANT: Set next_question_id to null to let the system use the natural question flow`;
 
       const completion = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',

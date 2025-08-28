@@ -4,11 +4,12 @@
   "description": "Memoora Call Recording Microservice",
   "main": "index.js",
   "scripts": {
-    "start": "NODE_ENV=production node index.js",
+    "start": "node index.js",
     "dev": "NODE_ENV=development nodemon index.js",
     "staging": "NODE_ENV=staging node index.js",
-    "build": "echo 'Production build complete'",
-    "postinstall": "echo 'Dependencies installed successfully'"
+    "production": "NODE_ENV=production node index.js",
+    "test": "echo 'Add your test command here'",
+    "lint": "echo 'Add your linting command here'"
   },
   "keywords": [
     "memoora",

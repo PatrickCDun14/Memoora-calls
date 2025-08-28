@@ -1,44 +1,60 @@
-# Memoora Call Recording Microservice
+# 🚀 Memoora Call Recording Microservice
 
-A production-ready microservice for initiating phone calls, asking AI-powered questions, and automatically recording responses with full database integration.
+A production-ready Node.js microservice for automated phone call recording with AI-powered conversation flows.
 
-## 🚀 Features
+## 🎯 Features
 
-- **Phone Call Management**: Initiate outbound calls via Twilio
-- **AI Question Reading**: Text-to-Speech integration for dynamic questions
-- **Automatic Recording**: Record call responses with metadata
-- **Database Integration**: Supabase storage for calls and recordings
-- **Webhook System**: Notify main applications when recordings complete
-- **API Key Management**: Secure, scalable API key system
-- **Rate Limiting**: Built-in protection against abuse
-- **Environment Management**: Development, staging, and production configs
+- **📞 Phone Call Management**: Initiate, record, and manage phone calls via Twilio
+- **🤖 AI Integration**: OpenAI-powered conversation flows and voice synthesis
+- **🗄️ Data Persistence**: Supabase database for call records and API key management
+- **🔐 Security**: API key authentication and rate limiting
+- **🎭 Voice Personalities**: Customizable voice configurations for different use cases
+- **📊 Webhooks**: Real-time call status updates and notifications
 
 ## 🏗️ Architecture
 
 ```
-Your App → Memoora API → Twilio → Phone Calls → Recordings → Supabase → Webhooks
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Frontend App  │───▶│  Memoora API     │───▶│   Twilio        │
+│                 │    │  (Express.js)    │    │   (Telephony)   │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                │
+                                ▼
+                       ┌──────────────────┐
+                       │   Supabase       │
+                       │   (Database)     │
+                       └──────────────────┘
+                                │
+                                ▼
+                       ┌──────────────────┐
+                       │   OpenAI         │
+                       │   (AI Services)  │
+                       └──────────────────┘
 ```
 
-## 📋 Prerequisites
-
-- Node.js 18+
-- Twilio Account (Account SID, Auth Token, Phone Number)
-- Supabase Project (URL, Service Role Key)
-- OpenAI API Key (for TTS features)
-
 ## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 18.x or higher
+- npm or yarn
+- Supabase account and project
+- Twilio account and phone number
+- OpenAI API key
 
 ### 1. Clone and Install
 ```bash
 git clone <your-repo-url>
-cd Memoora-calls
+cd memoora-calls
 npm install
 ```
 
 ### 2. Environment Setup
 ```bash
-cp env.example .env
-# Edit .env with your credentials
+# Copy the environment template
+cp ENV_TEMPLATE.md .env.local
+
+# Edit with your credentials
+nano .env.local
 ```
 
 ### 3. Start Development Server
@@ -46,137 +62,136 @@ cp env.example .env
 npm run dev
 ```
 
-### 4. Generate API Key
+The service will start on `http://localhost:5005` with automatic validation of your configuration.
+
+## 🌍 Environment Variables
+
+See `ENV_TEMPLATE.md` for complete environment variable documentation.
+
+### Required Variables
 ```bash
-curl -X POST "http://localhost:5005/api/v1/generate-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "clientName": "Your App",
-    "email": "your@email.com",
-    "companyWebsite": "https://yourapp.com",
-    "phoneNumber": "+1234567890"
-  }'
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_twilio_auth_token_here
+TWILIO_PHONE_NUMBER=+1234567890
+OPENAI_API_KEY=sk-proj-your_openai_api_key_here
 ```
 
-### 5. Make a Call
+## 📡 API Endpoints
+
+### Core Endpoints
+- `POST /api/v1/call` - Initiate outbound phone call
+- `GET /api/v1/recordings` - List call recordings
+- `GET /api/v1/recordings/:filename` - Download specific recording
+- `POST /api/v1/generate-api-key` - Generate new API key
+
+### Health & Info
+- `GET /health` - Service health check
+- `GET /api/v1/` - API discovery and documentation
+
+## 🔧 Development
+
+### Available Scripts
 ```bash
-curl -X POST "http://localhost:5005/api/v1/call" \
-  -H "x-api-key: YOUR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "to_number": "+1234567890",
-    "question": "Tell me about your favorite memory",
-    "interactive": true,
-    "storytellerId": "user-123"
-  }'
+npm run dev          # Start development server with nodemon
+npm run start        # Start production server
+npm run staging      # Start staging server
+npm run production   # Start production server
 ```
 
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `TWILIO_ACCOUNT_SID` | Your Twilio Account SID | ✅ |
-| `TWILIO_AUTH_TOKEN` | Your Twilio Auth Token | ✅ |
-| `TWILIO_PHONE_NUMBER` | Your Twilio phone number | ✅ |
-| `SUPABASE_URL` | Your Supabase project URL | ✅ |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key | ✅ |
-| `OPENAI_API_KEY` | OpenAI API key for TTS | ✅ |
-| `BASE_URL` | Your public service URL | ✅ |
-| `APP_BACKEND_URL` | Main app webhook URL | ✅ |
-| `MEMOORA_CALL_SERVICE_API_KEY` | Shared secret for webhooks | ✅ |
-
-### Environment Management
-```bash
-# Switch to development
-./scripts/deployment/switch-env.sh development
-
-# Switch to production
-./scripts/deployment/switch-env.sh production
+### Project Structure
 ```
-
-## 📚 API Reference
-
-### Authentication
-All API calls require an `x-api-key` header with a valid API key.
-
-### Endpoints
-
-#### Generate API Key
-```http
-POST /api/v1/generate-api-key
+memoora-calls/
+├── config/              # Configuration files
+│   ├── environment.js   # Environment variable management
+│   └── supabase.js      # Supabase client configuration
+├── routes-memoora/      # API route handlers
+│   ├── memoora.js       # Core call management routes
+│   ├── voice-modularity.js # Voice configuration routes
+│   └── scalable-calls.js # Scalable call handling
+├── utils/               # Utility services
+│   ├── api-key-service.js # API key management
+│   ├── supabase-service.js # Database operations
+│   ├── twilio.js        # Twilio integration
+│   └── security.js      # Authentication & security
+├── index.js             # Main application entry point
+└── package.json         # Dependencies and scripts
 ```
-
-#### Initiate Call
-```http
-POST /api/v1/call
-```
-
-#### Get Recordings
-```http
-GET /api/v1/recordings
-```
-
-#### Download Recording
-```http
-GET /api/v1/recordings/{filename}
-```
-
-## 🗄️ Database Schema
-
-The service uses Supabase with the following main tables:
-- `calls` - Call metadata and status
-- `recordings` - Recording files and metadata
-- `api_keys` - API key management
-- `accounts` - Account information
 
 ## 🚀 Deployment
 
-### Render (Recommended)
+### Local Development
 ```bash
-# Deploy to Render
-./scripts/deployment/deploy-render.sh
+npm run dev
 ```
 
-### Docker
+### Production
 ```bash
-# Build and run
-docker-compose up -d
+npm run production
 ```
 
-### Manual Deployment
+### Environment-Specific
 ```bash
-# Set production environment
-./scripts/deployment/switch-env.sh production
-
-# Start production server
-npm start
+NODE_ENV=production npm start
+NODE_ENV=staging npm start
 ```
 
-## 🔒 Security
+## 🔐 Security Features
 
-- API key authentication
-- Rate limiting
-- CORS protection
-- Input validation
-- HMAC webhook signatures
+- **API Key Authentication**: Secure API key validation with rate limiting
+- **Request Validation**: Input sanitization and phone number validation
+- **Rate Limiting**: Per-API key and global rate limiting
+- **CORS Protection**: Configurable cross-origin resource sharing
+- **Helmet Security**: HTTP security headers
 
 ## 📊 Monitoring
 
-- Health check endpoint: `/health`
-- Call status webhooks
-- Recording completion notifications
-- Database integration monitoring
+The service provides comprehensive logging and monitoring:
 
-## 🤝 Integration
+- **Startup Validation**: Automatic configuration validation
+- **Request Logging**: Detailed API request/response logging
+- **Error Tracking**: Comprehensive error logging with stack traces
+- **Performance Metrics**: Response time and rate limit monitoring
 
-See `docs/INTEGRATION_GUIDE.md` for detailed integration instructions with your main application.
+## 🆘 Troubleshooting
 
-## 📝 License
+### Common Issues
 
-[Your License Here]
+1. **"Missing required environment variables"**
+   - Check your `.env.local` file
+   - Ensure all required variables are set
 
-## 🆘 Support
+2. **"Supabase connection failed"**
+   - Verify Supabase credentials
+   - Check project status
 
-For support, contact: [your-email@domain.com]
+3. **"Twilio credentials not fully configured"**
+   - Verify Twilio SID, token, and phone number
+   - Ensure phone number is verified
+
+### Getting Help
+
+- Check the logs for detailed error messages
+- Verify your environment configuration
+- Review the `ENVIRONMENT_CLEANUP_SUMMARY.md` for common fixes
+
+## 📚 Additional Resources
+
+- [Supabase Documentation](https://supabase.com/docs)
+- [Twilio Documentation](https://www.twilio.com/docs)
+- [OpenAI API Documentation](https://platform.openai.com/docs)
+- [Express.js Documentation](https://expressjs.com/)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## 📄 License
+
+MIT License - see LICENSE file for details.

@@ -5,6 +5,7 @@ const path = require('path');
 const express = require('express');
 const router = express.Router();
 const twilio = require('twilio');
+const config = require('../config/environment');
 const { notifyAppBackend } = require('../utils/notifyAppBackend');
 const { 
   validateApiKey, 
@@ -13,7 +14,8 @@ const {
   requestSizeLimiter
 } = require('../utils/security');
 
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+// Initialize Twilio client with validated config
+const client = twilio(config.twilio.accountSid, config.twilio.authToken);
 
 // Health check endpoint for API routes
 router.get('/health', (req, res) => {
@@ -21,7 +23,7 @@ router.get('/health', (req, res) => {
     status: 'healthy', 
     service: 'Memoora Call Recording Microservice API',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
+    environment: config.env,
     version: '1.0.0'
   });
 });
@@ -561,6 +563,7 @@ router.all('/interactive/start', async (req, res) => {
     const initialState = {
       current_question: 'q1',
       conversation_start: new Date().toISOString(),
+      call_start_time: new Date().toISOString(), // Track when the call actually started
       answers: {},
       context: {},
       last_updated: new Date().toISOString(),
@@ -680,6 +683,27 @@ router.post('/interactive/transcription-webhook', async (req, res) => {
           
           console.log('✅ Whisper transcription successful:', whisperTranscript.substring(0, 100));
           
+          // Check if call has exceeded 5-minute time limit before continuing
+          const ConversationState = require('../src/state');
+          const state = new ConversationState();
+          const conversationState = await state.getState(callSid);
+          
+          if (conversationState && conversationState.call_start_time && hasCallExceededTimeLimit(conversationState.call_start_time)) {
+            console.log('⏰ Call has exceeded 5-minute time limit in Whisper fallback, ending gracefully...');
+            
+            const twiml = new twilio.twiml.VoiceResponse();
+            twiml.say({
+              voice: 'alice',
+              language: 'en-US'
+            }, `Thank you so much for sharing your stories with me today. Our time is up, but I've captured everything you've shared. Your family memories are precious and will be treasured. Have a wonderful day!`);
+            
+            twiml.hangup();
+            
+            res.type('text/xml');
+            res.send(twiml.toString());
+            return;
+          }
+          
           // Continue with conversation using Whisper transcript
           const twiml = await continueConversation(callSid, whisperTranscript);
           
@@ -700,6 +724,27 @@ router.post('/interactive/transcription-webhook', async (req, res) => {
       return;
     }
 
+    // Check if call has exceeded 5-minute time limit before continuing
+    const ConversationState = require('../src/state');
+    const state = new ConversationState();
+    const conversationState = await state.getState(callSid);
+    
+    if (conversationState && conversationState.call_start_time && hasCallExceededTimeLimit(conversationState.call_start_time)) {
+      console.log('⏰ Call has exceeded 5-minute time limit in transcription webhook, ending gracefully...');
+      
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.say({
+        voice: 'alice',
+        language: 'en-US'
+      }, `Thank you so much for sharing your stories with me today. Our time is up, but I've captured everything you've shared. Your family memories are precious and will be treasured. Have a wonderful day!`);
+      
+      twiml.hangup();
+      
+      res.type('text/xml');
+      res.send(twiml.toString());
+      return;
+    }
+
     // Continue with normal flow using Twilio transcription
     const twiml = await continueConversation(callSid, transcription);
     
@@ -715,6 +760,17 @@ router.post('/interactive/transcription-webhook', async (req, res) => {
     res.sendStatus(500);
   }
 });
+
+// Helper function to check if call has exceeded 5 minutes
+function hasCallExceededTimeLimit(callStartTime) {
+  const callStart = new Date(callStartTime);
+  const now = new Date();
+  const elapsedMinutes = (now - callStart) / (1000 * 60);
+  
+  console.log(`⏱️  Call time check: ${elapsedMinutes.toFixed(2)} minutes elapsed`);
+  
+  return elapsedMinutes >= 5;
+}
 
 // Helper function to continue conversation
 async function continueConversation(callSid, transcript) {
@@ -753,6 +809,24 @@ async function continueConversation(callSid, transcript) {
 
     console.log('✅ Conversation state retrieved:', conversationState);
 
+    // Check if call has exceeded 5-minute time limit
+    if (conversationState.call_start_time && hasCallExceededTimeLimit(conversationState.call_start_time)) {
+      console.log('⏰ Call has exceeded 5-minute time limit, ending gracefully...');
+      
+      // Note: We can't add the final answer here since currentQuestion and transcript aren't available in this context
+      
+      // Generate closing TwiML
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.say({
+        voice: 'alice',
+        language: 'en-US'
+      }, `Thank you so much for sharing your stories with me today. Our time is up, but I've captured everything you've shared. Your family memories are precious and will be treasured. Have a wonderful day!`);
+      
+      twiml.hangup();
+      
+      return twiml;
+    }
+
     // Get current question
     const ConversationFlow = require('../src/flow');
     const flow = new ConversationFlow();
@@ -778,14 +852,32 @@ async function continueConversation(callSid, transcript) {
     await state.addAnswer(callSid, currentQuestion.id, transcript, analysis.summary);
     console.log('✅ Answer added to conversation state');
 
-    // Determine next question
-    let nextQuestionId;
-    if (analysis.should_proceed && analysis.next_question_id) {
-      nextQuestionId = analysis.next_question_id;
-    } else if (analysis.should_proceed) {
-      nextQuestionId = currentQuestion.next;
+    // Determine next question using dynamic selection
+    let nextQuestion;
+    if (analysis.should_proceed) {
+      // Calculate time remaining
+      const timeRemaining = conversationState.call_start_time ? 
+        (5 - ((new Date() - new Date(conversationState.call_start_time)) / (1000 * 60))) : null;
+      
+      console.log(`⏱️  Time remaining: ${timeRemaining ? timeRemaining.toFixed(2) : 'unknown'} minutes`);
+      
+      // Use dynamic question selection
+      nextQuestion = flow.getBestNextQuestion(
+        conversationState.current_question, 
+        conversationState, 
+        timeRemaining
+      );
+      
+      if (nextQuestion) {
+        nextQuestionId = nextQuestion.id;
+        console.log(`✅ Dynamic question selected: ${nextQuestionId}`);
+      } else {
+        nextQuestionId = 'end';
+        console.log('🎯 No more questions available, ending conversation');
+      }
     } else {
       nextQuestionId = 'end';
+      console.log('🛑 AI analysis suggests ending conversation');
     }
 
     // Update current question to next one IMMEDIATELY
@@ -807,35 +899,18 @@ async function continueConversation(callSid, transcript) {
     if (nextQuestionId && nextQuestionId !== 'end') {
       console.log('🔄 Triggering next question:', nextQuestionId);
       
-            // Check if we should use dynamic questions
-      console.log(`🔍 Question flow decision for: ${nextQuestionId}`);
-      
-      // Get the most up-to-date state for the decision
-      const currentState = await state.getState(callSid);
-      console.log('🔍 Current state for decision:', currentState);
-      
-      const shouldUseDynamic = flow.shouldUseDynamicQuestions(currentState, nextQuestionId);
-      console.log(`🔍 Should use dynamic questions: ${shouldUseDynamic}`);
-      
-      if (shouldUseDynamic) {
-        console.log('🧠 Using dynamic question generation...');
-        
-        // Generate a dynamic question based on context
-        const dynamicQuestion = await openai.generateDynamicQuestion(
-          conversationState, 
-          transcript, 
-          flow
-        );
-        
-        console.log('✅ Dynamic question generated:', dynamicQuestion);
-        
-        // Generate TwiML with dynamic question
+      // Use the dynamic question we already selected
+      if (nextQuestion && nextQuestion.type !== 'closing') {
+        // Generate TwiML for the next question
         const twiml = new twilio.twiml.VoiceResponse();
+        
+        // Process prompt with context variables
+        const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
         
         twiml.say({
           voice: 'alice',
           language: 'en-US'
-        }, dynamicQuestion);
+        }, processedPrompt);
         
         twiml.record({
           action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
@@ -851,55 +926,20 @@ async function continueConversation(callSid, transcript) {
         return twiml;
         
       } else {
-        // Use scripted question
-        console.log('📜 Using scripted question:', nextQuestionId);
-        const nextQuestion = flow.getQuestion(nextQuestionId);
+        // End conversation
+        console.log('🎉 Ending conversation with closing message');
         
-        if (nextQuestion && nextQuestion.type !== 'closing') {
-          // Continue conversation with scripted question
-          console.log('🔄 Continuing conversation with scripted question:', nextQuestion.id);
-          
-          // Generate TwiML for the next question
-          const twiml = new twilio.twiml.VoiceResponse();
-          
-          // Process prompt with context variables
-          const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
-          
-          twiml.say({
-            voice: 'alice',
-            language: 'en-US'
-          }, processedPrompt);
-          
-          twiml.record({
-            action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
-            method: 'POST',
-            maxLength: 60,
-            finishOnKey: '#',
-            playBeep: false,
-            trim: 'trim-silence',
-            transcribe: true,
-            transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
-          });
-          
-          // Return the TwiML so it can be sent to the user
-          return twiml;
-          
-        } else {
-          // End conversation
-          console.log('🎉 Ending conversation with closing message');
-          
-          const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
-          const twiml = new twilio.twiml.VoiceResponse();
-          
-          twiml.say({
-            voice: 'alice',
-            language: 'en-US'
-          }, closingMessage);
-          
-          twiml.hangup();
-          
-          return twiml;
-        }
+        const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
+        const twiml = new twilio.twiml.VoiceResponse();
+        
+        twiml.say({
+          voice: 'alice',
+          language: 'en-US'
+        }, closingMessage);
+        
+        twiml.hangup();
+        
+        return twiml;
       }
     } else {
       // End conversation
@@ -1301,7 +1341,7 @@ router.post('/call',
 
   try {
     // Validate required fields
-    const { phoneNumber, customMessage, question, callType, interactive, storytellerId, familyMemberId } = req.body;
+    const { phoneNumber, customMessage, question, callType, interactive, storytellerId, familyMemberId, scheduledCallId } = req.body;
     
     if (!phoneNumber && !process.env.MY_PHONE_NUMBER) {
       return res.status(400).json({ error: 'Phone number is required' });
@@ -1316,6 +1356,7 @@ router.post('/call',
     console.log(`🔄 Interactive: ${interactive || false}`);
     if (storytellerId) console.log(`👤 Storyteller ID: ${storytellerId}`);
     if (familyMemberId) console.log(`👥 Family Member ID: ${familyMemberId}`);
+    if (scheduledCallId) console.log(`📅 Scheduled Call ID: ${scheduledCallId}`);
     
     // Validate phone number format and check if blocked
     const phoneValidation = validatePhoneNumber(targetNumber);
@@ -1367,14 +1408,15 @@ router.post('/call',
         from_number: process.env.TWILIO_PHONE_NUMBER,
         twilio_call_sid: call.sid,
         status: call.status,
-        call_type: callType || 'outbound',
+        call_type: callType || 'storytelling',
+        custom_message: req.body.customMessage || null,
+        storyteller_id: storytellerId || null,
+        family_member_id: familyMemberId || null,
+        scheduled_call_id: scheduledCallId || null,
+        interactive: interactive || false,
         metadata: {
-          customMessage: req.body.customMessage || null,
           question: question || null,
-          interactive: interactive || false,
-          callType: callType || 'standard',
-          storytellerId: storytellerId || null,
-          familyMemberId: familyMemberId || null,
+          callType: callType || 'storytelling',
           initiatedAt: new Date().toISOString(),
           apiKeyUsed: req.apiKeyInfo.key
         }
@@ -1395,10 +1437,20 @@ router.post('/call',
     console.log(`🆔 Call SID: ${call.sid}`);
     console.log(`📊 Initial Status: ${call.status}`);
     res.status(200).json({ 
-      message: 'Call initiated successfully', 
-      sid: call.sid,
+      success: true,
+      callId: dbCall?.id || 'pending',
+      twilioSid: call.sid,
       status: call.status,
-      to: targetNumber
+      message: 'Call initiated successfully',
+      to: targetNumber,
+      metadata: {
+        storytellerId: storytellerId || null,
+        familyMemberId: familyMemberId || null,
+        scheduledCallId: scheduledCallId || null,
+        callType: callType || 'storytelling',
+        question: question || null,
+        interactive: interactive || false
+      }
     });
   } catch (error) {
     console.error('❌ Error initiating call:', error.message);
@@ -2237,6 +2289,24 @@ router.post('/interactive/handle-transcription', async (req, res) => {
 
     console.log('✅ Conversation state retrieved:', conversationState);
 
+    // Check if call has exceeded 5-minute time limit
+    if (conversationState.call_start_time && hasCallExceededTimeLimit(conversationState.call_start_time)) {
+      console.log('⏰ Call has exceeded 5-minute time limit, ending gracefully...');
+      
+      // Note: We can't add the final answer here since currentQuestion and transcript aren't available in this context
+      
+      // Generate closing TwiML
+      const twiml = new twilio.twiml.VoiceResponse();
+      twiml.say({
+        voice: 'alice',
+        language: 'en-US'
+      }, `Thank you so much for sharing your stories with me today. Our time is up, but I've captured everything you've shared. Your family memories are precious and will be treasured. Have a wonderful day!`);
+      
+      twiml.hangup();
+      
+      return twiml;
+    }
+
     // Get current question
     const ConversationFlow = require('../src/flow');
     const flow = new ConversationFlow();
@@ -2246,72 +2316,65 @@ router.post('/interactive/handle-transcription', async (req, res) => {
     console.log('✅ Current question retrieved:', currentQuestion);
 
     // Since we're in the recording action callback, we need to continue immediately
-    // We'll use a simple approach: move to the next question
-    const nextQuestionId = currentQuestion.next;
+    // Use dynamic question selection based on time remaining and context
+    const timeRemaining = conversationState.call_start_time ? 
+      (5 - ((new Date() - new Date(conversationState.call_start_time)) / (1000 * 60))) : null;
     
-    if (nextQuestionId && nextQuestionId !== 'end') {
-      // Continue conversation with next question
-      console.log('🔄 Continuing conversation with next question:', nextQuestionId);
+    console.log(`⏱️  Time remaining: ${timeRemaining ? timeRemaining.toFixed(2) : 'unknown'} minutes`);
+    
+    // Use dynamic question selection
+    const nextQuestion = flow.getBestNextQuestion(
+      conversationState.current_question, 
+      conversationState, 
+      timeRemaining
+    );
+    
+    if (nextQuestion && nextQuestion.type !== 'closing') {
+      console.log(`✅ Dynamic question selected: ${nextQuestion.id}`);
       
       // Update state to next question
       await state.updateState(callSid, {
-        current_question: nextQuestionId
+        current_question: nextQuestion.id
       });
       
-      // Get the next question
-      const nextQuestion = flow.getQuestion(nextQuestionId);
+      // Generate TwiML for the next question
+      const twiml = new twilio.twiml.VoiceResponse();
       
-      if (nextQuestion && nextQuestion.type !== 'closing') {
-        // Generate TwiML for the next question
-        const twiml = new twilio.twiml.VoiceResponse();
-        
-        // Process prompt with context variables
-        const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
-        
-        twiml.say({
-          voice: 'alice',
-          language: 'en-US'
-        }, processedPrompt);
-        
-        twiml.record({
-          action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
-          method: 'POST',
-          maxLength: 60,
-          finishOnKey: '#',
-          playBeep: false,
-          trim: 'trim-silence',
-          transcribe: true,
-          transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
-        });
-        
-        res.type('text/xml');
-        res.send(twiml.toString());
-        return;
-        
-      } else {
-        // End conversation
-        console.log('🎉 Ending conversation with closing message');
-        
-        const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
-        const twiml = new twilio.twiml.VoiceResponse();
-        
-        twiml.say({
-          voice: 'alice',
-          language: 'en-US'
-        }, closingMessage);
-        
-        twiml.hangup();
-        
-        res.type('text/xml');
-        res.send(twiml.toString());
-        return;
-      }
+      // Process prompt with context variables
+      const processedPrompt = flow.processPrompt(nextQuestion.prompt, conversationState.context);
+      
+      twiml.say({
+        voice: 'alice',
+        language: 'en-US'
+      }, processedPrompt);
+      
+      twiml.record({
+        action: `${process.env.BASE_URL}/api/v1/interactive/handle-transcription`,
+        method: 'POST',
+        maxLength: 60,
+        finishOnKey: '#',
+        playBeep: false,
+        trim: 'trim-silence',
+        transcribe: true,
+        transcribeCallback: `${process.env.BASE_URL}/api/v1/interactive/transcription-webhook`
+      });
+      
+      res.type('text/xml');
+      res.send(twiml.toString());
+      return;
+      
     } else {
       // End conversation
-      console.log('🎉 Conversation ending - no more questions');
+      console.log('🎉 Ending conversation - no more questions or time limit reached');
       
+      const closingMessage = nextQuestion ? nextQuestion.prompt : 'Thank you for sharing your stories with us today.';
       const twiml = new twilio.twiml.VoiceResponse();
-      twiml.say('Thank you for sharing your stories with us today.');
+      
+      twiml.say({
+        voice: 'alice',
+        language: 'en-US'
+      }, closingMessage);
+      
       twiml.hangup();
       
       res.type('text/xml');

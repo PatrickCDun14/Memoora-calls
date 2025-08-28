@@ -1,17 +1,19 @@
 // utils/supabase-service.js
-const supabase = require('../config/supabase');
+const { supabase, supabaseAdmin } = require('../config/supabase');
 
 class SupabaseService {
   constructor() {
-    this.supabase = supabase;
+    // Use anon client for reads, admin client for writes
+    this.supabase = supabase;        // For reads
+    this.supabaseAdmin = supabaseAdmin; // For writes
   }
 
   /**
-   * Create a new call record
+   * Create a new call record (requires write permissions)
    */
   async createCall(callData) {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.supabaseAdmin
         .from('calls')
         .insert(callData)
         .select()
@@ -26,7 +28,7 @@ class SupabaseService {
   }
 
   /**
-   * Get a call by ID and account ID
+   * Get a call by ID and account ID (read operation)
    */
   async getCall(callId, accountId) {
     try {
@@ -46,7 +48,7 @@ class SupabaseService {
   }
 
   /**
-   * Update call status
+   * Update call status (requires write permissions)
    */
   async updateCallStatus(callId, status, metadata = {}) {
     try {
@@ -60,7 +62,7 @@ class SupabaseService {
         updateData.metadata = metadata;
       }
 
-      const { data, error } = await this.supabase
+      const { data, error } = await this.supabaseAdmin
         .from('calls')
         .update(updateData)
         .eq('id', callId)
@@ -80,11 +82,11 @@ class SupabaseService {
   }
 
   /**
-   * Update call with Twilio SID
+   * Update call with Twilio SID (requires write permissions)
    */
   async updateCallWithTwilioSid(callId, twilioSid) {
     try {
-      const { data, error } = await this.supabase
+      const { data, error } = await this.supabaseAdmin
         .from('calls')
         .update({
           twilio_call_sid: twilioSid,

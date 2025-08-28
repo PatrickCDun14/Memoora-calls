@@ -79,6 +79,106 @@ class ConversationFlow {
   }
 
   /**
+   * Get the best next question dynamically based on context and conversation flow
+   */
+  getBestNextQuestion(currentQuestionId, context = {}, timeRemaining = null) {
+    const currentQuestion = this.getQuestion(currentQuestionId);
+    if (!currentQuestion) {
+      throw new Error(`Question ${currentQuestionId} not found`);
+    }
+
+    // If this is the end, return null
+    if (currentQuestion.next === null || currentQuestion.next === 'end') {
+      return null;
+    }
+
+    // Check if we should use dynamic question selection
+    if (this.shouldUseDynamicQuestions(context, currentQuestionId)) {
+      return this.selectDynamicQuestion(context, timeRemaining);
+    }
+
+    // For q1, we now use dynamic selection after getting the answer
+    // This should not happen in normal flow, but as a fallback
+    const nextQuestion = this.getQuestion(currentQuestion.next);
+    if (!nextQuestion) {
+      throw new Error(`Next question ${currentQuestion.next} not found`);
+    }
+
+    // Replace context variables in the prompt
+    const processedPrompt = this.processPrompt(nextQuestion.prompt, context);
+    
+    return {
+      ...nextQuestion,
+      prompt: processedPrompt
+    };
+  }
+
+  /**
+   * Select the best dynamic question based on context and time remaining
+   */
+  selectDynamicQuestion(context, timeRemaining) {
+    console.log('🧠 Selecting dynamic question based on context and time...');
+    
+    // Get all available questions (excluding only q1 and end)
+    const availableQuestions = this.questions.filter(q => 
+      !['q1', 'end'].includes(q.id) && 
+      q.type !== 'closing'
+    );
+
+    // If no time remaining, end the conversation gracefully
+    if (timeRemaining !== null && timeRemaining <= 0) {
+      console.log('⏰ No time remaining, ending conversation gracefully');
+      return this.getQuestion('end');
+    }
+
+    // Score questions based on context relevance and time efficiency
+    const scoredQuestions = availableQuestions.map(question => {
+      let score = 0;
+      
+      // Base score for question type
+      score += this.getQuestionTypeScore(question);
+      
+      // Context relevance score
+      score += this.getContextRelevanceScore(question, context);
+      
+      // Time efficiency score (shorter questions get higher scores when time is limited)
+      if (timeRemaining !== null && timeRemaining < 2) {
+        score += this.getTimeEfficiencyScore(question, timeRemaining);
+      }
+      
+      // Avoid recently asked questions
+      if (context.answers && context.answers[question.id]) {
+        score -= 100; // Heavy penalty for already asked questions
+      }
+      
+      return { question, score };
+    });
+
+    // Sort by score (highest first) and select the best
+    scoredQuestions.sort((a, b) => b.score - a.score);
+    
+    console.log('📊 Question scores:', scoredQuestions.map(q => 
+      `${q.question.id}: ${q.score}`
+    ));
+
+    const bestQuestion = scoredQuestions[0];
+    if (!bestQuestion) {
+      console.log('❌ No suitable questions found, ending conversation');
+      return this.getQuestion('end');
+    }
+
+    console.log(`✅ Selected dynamic question: ${bestQuestion.question.id} (score: ${bestQuestion.score})`);
+    
+    // Replace context variables in the prompt
+    const processedPrompt = this.processPrompt(bestQuestion.question.prompt, context);
+    
+    return {
+      ...bestQuestion.question,
+      prompt: processedPrompt
+    };
+  }
+
+  /**
    * Process prompt template with context variables
    */
   processPrompt(prompt, context) {
@@ -171,8 +271,8 @@ class ConversationFlow {
    * Check if we should use dynamic questions based on conversation progress
    */
   shouldUseDynamicQuestions(conversationContext, currentQuestionId) {
-    // Use dynamic questions after the first 3 foundation questions
-    const foundationQuestions = ['q1', 'q2', 'q3'];
+    // Use dynamic questions after the first foundation question
+    const foundationQuestions = ['q1'];
     
     // Check if we have answers to foundation questions
     const hasFoundation = foundationQuestions.some(q => 
@@ -182,7 +282,9 @@ class ConversationFlow {
     // Check if we're past the foundation questions
     const isPastFoundation = !foundationQuestions.includes(currentQuestionId);
     
-    const shouldUseDynamic = hasFoundation && isPastFoundation;
+    // Use dynamic questions if we have foundation answers AND we're past foundation questions
+    // OR if we're currently on q1 (the last foundation question)
+    const shouldUseDynamic = hasFoundation && (isPastFoundation || currentQuestionId === 'q1');
     
     console.log(`🔍 Dynamic question check:`, {
       currentQuestionId,
@@ -200,6 +302,71 @@ class ConversationFlow {
    */
   getDynamicQuestionPrompt() {
     return "I'd love to hear more about your story. What would you like to share next?";
+  }
+
+  /**
+   * Score question based on type
+   */
+  getQuestionTypeScore(question) {
+    const typeScores = {
+      'free_text': 10,
+      'multiple_choice': 8,
+      'yes_no': 6,
+      'closing': 0
+    };
+    
+    return typeScores[question.type] || 5;
+  }
+
+  /**
+   * Score question based on context relevance
+   */
+  getContextRelevanceScore(question, context) {
+    let score = 0;
+    
+    // If we have a name, questions that use it get higher scores
+    if (context.name && question.prompt.includes('{{name}}')) {
+      score += 5;
+    }
+    
+    // Questions that build on previous answers get higher scores
+    if (context.answers) {
+      const hasRelevantContext = Object.keys(context.answers).some(key => 
+        question.context_key && question.context_key !== key
+      );
+      if (hasRelevantContext) {
+        score += 3;
+      }
+    }
+    
+    // Questions about family and memories get higher scores (core purpose)
+    const familyKeywords = ['family', 'memory', 'story', 'childhood', 'grandparent', 'tradition'];
+    const hasFamilyKeywords = familyKeywords.some(keyword => 
+      question.prompt.toLowerCase().includes(keyword)
+    );
+    if (hasFamilyKeywords) {
+      score += 4;
+    }
+    
+    return score;
+  }
+
+  /**
+   * Score question based on time efficiency
+   */
+  getTimeEfficiencyScore(question, timeRemaining) {
+    // Shorter prompts are better when time is limited
+    const promptLength = question.prompt.length;
+    
+    if (timeRemaining < 1) {
+      // Very limited time - prefer very short questions
+      return promptLength < 100 ? 10 : 0;
+    } else if (timeRemaining < 2) {
+      // Limited time - prefer shorter questions
+      return promptLength < 150 ? 8 : 4;
+    }
+    
+    return 0; // No time pressure
   }
 }
 
