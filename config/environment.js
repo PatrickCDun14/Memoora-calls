@@ -50,7 +50,9 @@ const environments = {
       origin: [
         process.env.CORS_ORIGIN || process.env.BASE_URL,
         'https://memoora-backend.onrender.com',
-        'https://frontend-one-ebon-91.vercel.app'
+        'https://frontend-one-ebon-91.vercel.app',
+        'https://memoora.com',
+        'https://www.memoora.com'
       ].filter(Boolean),
       credentials: true
     }
@@ -63,7 +65,8 @@ const environments = {
       origin: [
         process.env.CORS_ORIGIN || process.env.BASE_URL,
         'https://memoora-backend.onrender.com',
-        'https://memoora.com'
+        'https://memoora.com',
+        'https://www.memoora.com'
       ].filter(Boolean),
       credentials: true
     }
