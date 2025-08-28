@@ -8,8 +8,14 @@
     "dev": "NODE_ENV=development nodemon index.js",
     "staging": "NODE_ENV=staging node index.js",
     "production": "NODE_ENV=production node index.js",
-    "test": "echo 'Add your test command here'",
-    "lint": "echo 'Add your linting command here'"
+    "test": "node test-enhanced-api.js",
+    "lint": "echo 'Add your linting command here'",
+    "docker:build": "docker build -t memoora-calls .",
+    "docker:run": "docker run -p 5005:5005 --env-file .env.local memoora-calls",
+    "docker:dev": "docker-compose up --build",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up --build",
+    "docker:stop": "docker-compose down",
+    "docker:clean": "docker system prune -f"
   },
   "keywords": [
     "memoora",
