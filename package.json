@@ -7,7 +7,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "echo \"No tests specified\" && exit 0",
-    "build": "npm ci --production",
+    "build": "npm ci --omit=dev",
     "start:prod": "NODE_ENV=production node index.js",
     "docker:build": "docker build -f Dockerfile.production -t memoora-calls:latest .",
     "docker:deploy": "docker-compose -f docker-compose.production.yml up -d --build",
