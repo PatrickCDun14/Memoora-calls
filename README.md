@@ -1,188 +1,169 @@
-# 🚀 Memoora Call Recording Microservice
+# Memoora Calls Microservice
 
-A production-ready Node.js microservice for automated phone call recording with AI-powered conversation flows.
+A simple, focused microservice for initiating phone calls and recording stories via Twilio.
 
-## 🎯 Features
+## 🎯 What It Does
 
-- **📞 Phone Call Management**: Initiate, record, and manage phone calls via Twilio
-- **🤖 AI Integration**: OpenAI-powered conversation flows and voice synthesis
-- **🗄️ Data Persistence**: Supabase database for call records and API key management
-- **🔐 Security**: API key authentication and rate limiting
-- **🎭 Voice Personalities**: Customizable voice configurations for different use cases
-- **📊 Webhooks**: Real-time call status updates and notifications
+- **Initiate Phone Calls**: Make outbound calls to storytellers
+- **Record Stories**: Automatically record responses during calls
+- **Store Recordings**: Save audio files locally with metadata
+- **API Management**: Generate and validate API keys for access
+
+## 🚀 Quick Start
+
+### 1. Install Dependencies
+```bash
+npm install
+```
+
+### 2. Set Environment Variables
+Copy `env.example` to `.env` and configure:
+```bash
+cp env.example .env
+```
+
+Required variables:
+- `TWILIO_ACCOUNT_SID`: Your Twilio account SID
+- `TWILIO_AUTH_TOKEN`: Your Twilio auth token  
+- `TWILIO_PHONE_NUMBER`: Your Twilio phone number
+
+### 3. Start the Service
+```bash
+# Development
+npm run dev
+
+# Production
+npm start
+```
+
+The service will be available at `http://localhost:5005`
+
+## 📞 API Endpoints
+
+### Public Endpoints
+- `GET /health` - Service health check
+- `POST /api/v1/generate-api-key` - Generate new API key
+
+### Protected Endpoints (require `x-api-key` header)
+- `POST /api/v1/call` - Initiate a phone call
+- `GET /api/v1/calls` - List all calls
+- `GET /api/v1/calls/:id` - Get call details
+- `GET /api/v1/recordings` - List all recordings
+- `GET /api/v1/recordings/:filename` - Get recording details
+- `GET /api/v1/api-keys` - List API keys
+- `GET /api/v1/stats` - Service statistics
+
+## 🔑 Authentication
+
+All protected endpoints require an API key in the `x-api-key` header:
+
+```bash
+curl -H "x-api-key: your_api_key_here" \
+     http://localhost:5005/api/v1/calls
+```
+
+## 📱 Making a Call
+
+```bash
+curl -X POST "http://localhost:5005/api/v1/call" \
+  -H "x-api-key: your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "+1234567890",
+    "customMessage": "Tell me about your favorite childhood memory",
+    "storytellerId": "storyteller-123",
+    "familyMemberId": "family-456"
+  }'
+```
+
+## 🎵 Recording Flow
+
+1. **Call Initiated**: Service creates call record and initiates Twilio call
+2. **Phone Rings**: Storyteller receives call with your custom message
+3. **Recording Starts**: Twilio automatically records the response
+4. **Webhook Received**: Service downloads and stores the recording
+5. **Call Complete**: Recording metadata linked to call record
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Frontend App  │───▶│  Memoora API     │───▶│   Twilio        │
-│                 │    │  (Express.js)    │    │   (Telephony)   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │   Supabase       │
-                       │   (Database)     │
-                       └──────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │   OpenAI         │
-                       │   (AI Services)  │
-                       └──────────────────┘
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   API Client    │───▶│  Express App    │───▶│  Twilio API     │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                       ┌─────────────────┐
+                       │  In-Memory      │
+                       │  Services       │
+                       │  - API Keys     │
+                       │  - Calls        │
+                       │  - Recordings   │
+                       └─────────────────┘
 ```
 
-## 🚀 Quick Start
+## 🔧 Local Development
 
-### Prerequisites
-- Node.js 18.x or higher
-- npm or yarn
-- Supabase account and project
-- Twilio account and phone number
-- OpenAI API key
-
-### 1. Clone and Install
+### Using ngrok for Twilio Webhooks
 ```bash
-git clone <your-repo-url>
-cd memoora-calls
-npm install
-```
+# Install ngrok
+npm install -g ngrok
 
-### 2. Environment Setup
-```bash
-# Copy the environment template
-cp ENV_TEMPLATE.md .env.local
-
-# Edit with your credentials
-nano .env.local
-```
-
-### 3. Start Development Server
-```bash
+# Start your service
 npm run dev
+
+# In another terminal, expose local service
+ngrok http 5005
+
+# Update .env with ngrok URL
+BASE_URL=https://your-ngrok-url.ngrok-free.app
 ```
 
-The service will start on `http://localhost:5005` with automatic validation of your configuration.
+### Testing the Complete Flow
+1. Generate an API key
+2. Make a test call
+3. Check call status
+4. Verify recording download
 
-## 🌍 Environment Variables
+## 📁 Project Structure
 
-See `ENV_TEMPLATE.md` for complete environment variable documentation.
-
-### Required Variables
-```bash
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_anon_key_here
-SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_here
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your_twilio_auth_token_here
-TWILIO_PHONE_NUMBER=+1234567890
-OPENAI_API_KEY=sk-proj-your_openai_api_key_here
 ```
-
-## 📡 API Endpoints
-
-### Core Endpoints
-- `POST /api/v1/call` - Initiate outbound phone call
-- `GET /api/v1/recordings` - List call recordings
-- `GET /api/v1/recordings/:filename` - Download specific recording
-- `POST /api/v1/generate-api-key` - Generate new API key
-
-### Health & Info
-- `GET /health` - Service health check
-- `GET /api/v1/` - API discovery and documentation
-
-## 🔧 Development
-
-### Available Scripts
-```bash
-npm run dev          # Start development server with nodemon
-npm run start        # Start production server
-npm run staging      # Start staging server
-npm run production   # Start production server
-```
-
-### Project Structure
-```
-memoora-calls/
-├── config/              # Configuration files
-│   ├── environment.js   # Environment variable management
-│   └── supabase.js      # Supabase client configuration
-├── routes-memoora/      # API route handlers
-│   ├── memoora.js       # Core call management routes
-│   ├── voice-modularity.js # Voice configuration routes
-│   └── scalable-calls.js # Scalable call handling
-├── utils/               # Utility services
-│   ├── api-key-service.js # API key management
-│   ├── supabase-service.js # Database operations
-│   ├── twilio.js        # Twilio integration
-│   └── security.js      # Authentication & security
-├── index.js             # Main application entry point
-└── package.json         # Dependencies and scripts
+├── index.js                    # Main application entry point
+├── routes-memoora/
+│   └── simple-memoora.js      # API route definitions
+├── utils/
+│   ├── simple-api-key-service.js    # API key management
+│   ├── simple-call-service.js       # Call tracking
+│   ├── simple-twilio-service.js     # Twilio integration
+│   └── simple-recording-service.js  # Recording storage
+├── config/
+│   └── environment.js         # Environment configuration
+├── recordings/                # Downloaded audio files
+└── package.json
 ```
 
 ## 🚀 Deployment
 
-### Local Development
+### Docker
 ```bash
-npm run dev
+docker build -t memoora-calls .
+docker run -p 5005:5005 --env-file .env memoora-calls
 ```
 
-### Production
-```bash
-npm run production
-```
-
-### Environment-Specific
-```bash
-NODE_ENV=production npm start
-NODE_ENV=staging npm start
-```
-
-## 🔐 Security Features
-
-- **API Key Authentication**: Secure API key validation with rate limiting
-- **Request Validation**: Input sanitization and phone number validation
-- **Rate Limiting**: Per-API key and global rate limiting
-- **CORS Protection**: Configurable cross-origin resource sharing
-- **Helmet Security**: HTTP security headers
+### Render
+The service includes `render.yaml` for automatic deployment on Render.
 
 ## 📊 Monitoring
 
-The service provides comprehensive logging and monitoring:
+- **Health Check**: `GET /health`
+- **Service Stats**: `GET /api/v1/stats`
+- **API Key Usage**: Tracked per key with rate limiting
 
-- **Startup Validation**: Automatic configuration validation
-- **Request Logging**: Detailed API request/response logging
-- **Error Tracking**: Comprehensive error logging with stack traces
-- **Performance Metrics**: Response time and rate limit monitoring
+## 🔒 Security Features
 
-## 🆘 Troubleshooting
-
-### Common Issues
-
-1. **"Missing required environment variables"**
-   - Check your `.env.local` file
-   - Ensure all required variables are set
-
-2. **"Supabase connection failed"**
-   - Verify Supabase credentials
-   - Check project status
-
-3. **"Twilio credentials not fully configured"**
-   - Verify Twilio SID, token, and phone number
-   - Ensure phone number is verified
-
-### Getting Help
-
-- Check the logs for detailed error messages
-- Verify your environment configuration
-- Review the `ENVIRONMENT_CLEANUP_SUMMARY.md` for common fixes
-
-## 📚 Additional Resources
-
-- [Supabase Documentation](https://supabase.com/docs)
-- [Twilio Documentation](https://www.twilio.com/docs)
-- [OpenAI API Documentation](https://platform.openai.com/docs)
-- [Express.js Documentation](https://expressjs.com/)
+- API key authentication for all protected endpoints
+- Rate limiting per API key
+- CORS configuration for allowed domains
+- Input validation and sanitization
 
 ## 🤝 Contributing
 
@@ -194,4 +175,4 @@ The service provides comprehensive logging and monitoring:
 
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+MIT License - see LICENSE file for details

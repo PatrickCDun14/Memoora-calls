@@ -1,52 +1,39 @@
 {
   "name": "memoora-calls",
   "version": "1.0.0",
-  "description": "Memoora Call Recording Microservice",
+  "description": "A simple microservice for initiating phone calls and recording stories",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "NODE_ENV=development nodemon index.js",
-    "staging": "NODE_ENV=staging node index.js",
-    "production": "NODE_ENV=production node index.js",
-    "test": "node test-enhanced-api.js",
-    "lint": "echo 'Add your linting command here'",
-    "docker:build": "docker build -t memoora-calls .",
-    "docker:run": "docker run -p 5005:5005 --env-file .env.local memoora-calls",
-    "docker:dev": "docker-compose up --build",
-    "docker:prod": "docker-compose -f docker-compose.prod.yml up --build",
-    "docker:stop": "docker-compose down",
-    "docker:clean": "docker system prune -f"
+    "dev": "nodemon index.js",
+    "test": "echo \"No tests specified\" && exit 0",
+    "build": "npm ci --production",
+    "start:prod": "NODE_ENV=production node index.js",
+    "docker:build": "docker build -f Dockerfile.production -t memoora-calls:latest .",
+    "docker:deploy": "docker-compose -f docker-compose.production.yml up -d --build",
+    "docker:logs": "docker-compose -f docker-compose.production.yml logs -f",
+    "validate:env": "node -e \"require('dotenv').config(); require('./config/environment').validateEnvironment()\"",
+    "health:check": "curl -s http://localhost:5005/health | jq ."
   },
   "keywords": [
     "memoora",
-    "call-recording",
+    "calls",
+    "recordings",
     "twilio",
-    "microservice",
-    "api"
+    "microservice"
   ],
-  "author": "Your Name",
+  "author": "Memoora Team",
   "license": "MIT",
   "dependencies": {
-    "@supabase/supabase-js": "^2.55.0",
-    "axios": "^1.6.0",
-    "body-parser": "^1.20.2",
-    "compression": "^1.7.4",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.0.3",
     "express": "^4.18.2",
-    "express-rate-limit": "^7.1.5",
-    "form-data": "^4.0.0",
-    "helmet": "^7.1.0",
-    "morgan": "^1.10.0",
-    "multer": "^1.4.5-lts.1",
-    "openai": "^5.12.2",
-    "twilio": "^4.19.0",
-    "ioredis": "^5.3.2"
+    "twilio": "^4.10.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "nodemon": "^2.0.22"
   },
   "engines": {
-    "node": "18.x"
+    "node": ">=18.0.0"
   }
 }
