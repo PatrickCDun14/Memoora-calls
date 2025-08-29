@@ -26,7 +26,7 @@
 - **Root Directory**: Leave empty (root of repo)
 
 ### **Build & Deploy:**
-- **Build Command**: `npm ci --production`
+- **Build Command**: `npm ci --omit=dev`
 - **Start Command**: `npm start`
 
 ### **Plan:**
