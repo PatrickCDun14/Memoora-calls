@@ -98,8 +98,8 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
         apiKeyInfo: req.account
       });
 
-                   // If Twilio is configured, make real call
-             if (twilioService.isReady()) {
+      // If Twilio is configured, make real call
+      if (twilioService.isReady()) {
         twilioService.makeCall({
           phoneNumber,
           customMessage,
@@ -107,13 +107,22 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
           webhookUrl: `${process.env.BASE_URL || 'http://localhost:5005'}/api/v1/voice`
         })
         .then(twilioResult => {
-          // Update call record with Twilio SID
+          // Update call record with Twilio SID and caller ID information
           callService.updateCallStatus(callRecord.id, 'twilio_initiated', {
             twilioSid: twilioResult.twilioSid,
             metadata: {
-              twilioStatus: twilioResult.status
+              twilioStatus: twilioResult.status,
+              callerId: twilioResult.callerId,
+              callerIdType: twilioResult.callerIdType,
+              fallbackUsed: twilioResult.fallbackUsed || false,
+              fallbackReason: twilioResult.fallbackReason || null
             }
           });
+          
+          console.log(`📞 Call ${callRecord.id} initiated with caller ID: ${twilioResult.callerId} (${twilioResult.callerIdType})`);
+          if (twilioResult.fallbackUsed) {
+            console.log(`⚠️  Fallback used for call ${callRecord.id}: ${twilioResult.fallbackReason}`);
+          }
         })
         .catch(twilioError => {
           callService.updateCallStatus(callRecord.id, 'twilio_failed', {

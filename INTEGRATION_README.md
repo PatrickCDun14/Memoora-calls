@@ -368,3 +368,4 @@ const health = await fetch('https://memoora-calls.onrender.com/health');
 ---
 
 **🎉 You're now ready to integrate!** Start with the health check, then generate an API key, and make your first call. The microservice handles all the complexity - you just need to make HTTP requests! 🚀
+

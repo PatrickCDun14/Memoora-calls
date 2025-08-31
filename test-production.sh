@@ -3,7 +3,7 @@
 # 🚀 Production Test Script for Memoora Microservice
 # Replace YOUR_APP_NAME with your actual Render app name
 
-APP_NAME="YOUR_APP_NAME"  # Change this to your actual app name
+APP_NAME="memoora-calls"  # Your Render app name
 BASE_URL="https://${APP_NAME}.onrender.com"
 
 echo "🧪 Testing Memoora Microservice on Render: ${BASE_URL}"

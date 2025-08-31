@@ -5,6 +5,7 @@ A simple, focused microservice for initiating phone calls and recording stories 
 ## 🎯 What It Does
 
 - **Initiate Phone Calls**: Make outbound calls to storytellers
+- **Professional Caller ID**: Display "Memoora" instead of phone number (Alpha Sender ID)
 - **Record Stories**: Automatically record responses during calls
 - **Store Recordings**: Save audio files locally with metadata
 - **API Management**: Generate and validate API keys for access
@@ -26,6 +27,11 @@ Required variables:
 - `TWILIO_ACCOUNT_SID`: Your Twilio account SID
 - `TWILIO_AUTH_TOKEN`: Your Twilio auth token  
 - `TWILIO_PHONE_NUMBER`: Your Twilio phone number
+
+Optional variables:
+- `USE_ALPHA_SENDER_ID`: Set to `true` to enable professional caller ID
+- `ALPHA_SENDER_ID`: Text to display as caller ID (default: "Memoora")
+- `FALLBACK_PHONE_NUMBER`: Phone number to use if alpha sender fails
 
 ### 3. Start the Service
 ```bash
@@ -79,10 +85,31 @@ curl -X POST "http://localhost:5005/api/v1/call" \
 ## 🎵 Recording Flow
 
 1. **Call Initiated**: Service creates call record and initiates Twilio call
-2. **Phone Rings**: Storyteller receives call with your custom message
+2. **Phone Rings**: Storyteller receives call with your custom message (shows "Memoora" as caller ID)
 3. **Recording Starts**: Twilio automatically records the response
 4. **Webhook Received**: Service downloads and stores the recording
 5. **Call Complete**: Recording metadata linked to call record
+
+## 📞 Professional Caller ID (Alpha Sender ID)
+
+The service supports **Alpha Sender ID** to display "Memoora" instead of a phone number on the recipient's caller ID. This creates a more professional and recognizable caller experience.
+
+### Enable Alpha Sender ID
+
+```bash
+# In your .env file
+USE_ALPHA_SENDER_ID=true
+ALPHA_SENDER_ID=Memoora
+FALLBACK_PHONE_NUMBER=+1234567890  # Optional fallback
+```
+
+### Benefits
+- ✅ **Professional appearance** - Shows "Memoora" instead of random number
+- ✅ **Brand recognition** - Recipients immediately know it's from Memoora
+- ✅ **Higher answer rates** - People are more likely to answer calls from known brands
+- ✅ **Automatic fallback** - Falls back to phone number if alpha sender ID not supported
+
+For detailed configuration and testing, see [ALPHA_SENDER_ID_GUIDE.md](ALPHA_SENDER_ID_GUIDE.md).
 
 ## 🏗️ Architecture
 

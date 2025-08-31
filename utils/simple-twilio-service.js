@@ -10,12 +10,21 @@ class SimpleTwilioService {
     
     this.phoneNumber = process.env.TWILIO_PHONE_NUMBER;
     
+    // Alpha sender ID configuration
+    this.useAlphaSender = process.env.USE_ALPHA_SENDER_ID === 'true';
+    this.alphaSenderId = process.env.ALPHA_SENDER_ID || 'Memoora';
+    this.fallbackNumber = process.env.FALLBACK_PHONE_NUMBER || this.phoneNumber;
+    
     // Validate configuration
     this.isConfigured = !!(this.client && this.phoneNumber);
     
     if (this.isConfigured) {
       console.log('📞 Twilio Service initialized successfully');
       console.log(`📞 Twilio Phone Number: ${this.phoneNumber}`);
+      console.log(`📞 Alpha Sender ID: ${this.useAlphaSender ? this.alphaSenderId : 'disabled'}`);
+      if (this.useAlphaSender) {
+        console.log(`📞 Fallback Number: ${this.fallbackNumber}`);
+      }
     } else {
       console.log('⚠️  Twilio Service not fully configured');
       console.log('⚠️  Check TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER');
@@ -43,11 +52,13 @@ class SimpleTwilioService {
       isValid: errors.length === 0,
       errors,
       hasCredentials: !!(this.accountSid && this.authToken),
-      hasPhoneNumber: !!this.phoneNumber
+      hasPhoneNumber: !!this.phoneNumber,
+      alphaSenderEnabled: this.useAlphaSender,
+      alphaSenderId: this.alphaSenderId
     };
   }
 
-  // Make a real phone call
+  // Make a real phone call with alpha sender ID support and fallback
   async makeCall(callData) {
     if (!this.isReady()) {
       throw new Error('Twilio service not configured');
@@ -69,10 +80,9 @@ class SimpleTwilioService {
       const baseUrl = process.env.BASE_URL || 'http://localhost:5005';
       console.log(`📞 Using base URL: ${baseUrl}`);
 
-      // Create Twilio call parameters
-      const callParams = {
+      // Create base Twilio call parameters
+      const baseCallParams = {
         to: phoneNumber,
-        from: this.phoneNumber,
         url: webhookUrl || `${baseUrl}/api/v1/voice`,
         statusCallback: `${baseUrl}/api/v1/call-status`,
         statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
@@ -84,31 +94,119 @@ class SimpleTwilioService {
 
       // Add metadata to track the call
       if (callId) {
-        callParams.statusCallbackEvent = [...callParams.statusCallbackEvent, 'answered'];
+        baseCallParams.statusCallbackEvent = [...baseCallParams.statusCallbackEvent, 'answered'];
       }
 
-      console.log('📞 Twilio call parameters:', {
-        to: phoneNumber,
-        from: this.phoneNumber,
-        webhookUrl: callParams.url,
-        record: callParams.record,
-        baseUrl: baseUrl
-      });
+      // Try alpha sender ID first if enabled
+      if (this.useAlphaSender) {
+        try {
+          console.log(`📞 Attempting call with alpha sender ID: ${this.alphaSenderId}`);
+          
+          const alphaCallParams = {
+            ...baseCallParams,
+            from: this.alphaSenderId
+          };
 
-      // Make the actual call
-      const call = await this.client.calls.create(callParams);
+          console.log('📞 Alpha sender call parameters:', {
+            to: phoneNumber,
+            from: this.alphaSenderId,
+            webhookUrl: alphaCallParams.url,
+            record: alphaCallParams.record,
+            baseUrl: baseUrl
+          });
 
-      console.log(`📞 Twilio call initiated successfully!`);
-      console.log(`📞 Twilio Call SID: ${call.sid}`);
-      console.log(`📞 Call Status: ${call.status}`);
+          const call = await this.client.calls.create(alphaCallParams);
 
-      return {
-        success: true,
-        twilioSid: call.sid,
-        status: call.status,
-        callId: callId,
-        message: 'Real phone call initiated via Twilio'
-      };
+          console.log(`✅ Call initiated successfully with alpha sender ID: ${this.alphaSenderId}`);
+          console.log(`📞 Twilio Call SID: ${call.sid}`);
+          console.log(`📞 Call Status: ${call.status}`);
+
+          return {
+            success: true,
+            twilioSid: call.sid,
+            status: call.status,
+            callId: callId,
+            callerId: this.alphaSenderId,
+            callerIdType: 'alpha_sender',
+            message: 'Real phone call initiated via Twilio with alpha sender ID'
+          };
+
+        } catch (error) {
+          console.error(`❌ Alpha sender ID failed: ${error.message}`);
+          
+          // Check if it's an alpha sender ID specific error
+          if (error.code === 21211 || error.message.includes('Invalid') || error.message.includes('from')) {
+            console.log(`🔄 Falling back to phone number: ${this.fallbackNumber}`);
+            
+            // Fallback to phone number
+            const fallbackCallParams = {
+              ...baseCallParams,
+              from: this.fallbackNumber
+            };
+
+            console.log('📞 Fallback call parameters:', {
+              to: phoneNumber,
+              from: this.fallbackNumber,
+              webhookUrl: fallbackCallParams.url,
+              record: fallbackCallParams.record,
+              baseUrl: baseUrl
+            });
+
+            const fallbackCall = await this.client.calls.create(fallbackCallParams);
+
+            console.log(`✅ Call initiated successfully with fallback phone number`);
+            console.log(`📞 Twilio Call SID: ${fallbackCall.sid}`);
+            console.log(`📞 Call Status: ${fallbackCall.status}`);
+
+            return {
+              success: true,
+              twilioSid: fallbackCall.sid,
+              status: fallbackCall.status,
+              callId: callId,
+              callerId: this.fallbackNumber,
+              callerIdType: 'phone_number',
+              fallbackUsed: true,
+              fallbackReason: error.message,
+              message: 'Real phone call initiated via Twilio with fallback phone number'
+            };
+          }
+          
+          // If it's not an alpha sender ID issue, re-throw the error
+          throw error;
+        }
+      } else {
+        // Alpha sender ID disabled, use phone number directly
+        console.log(`📞 Using phone number caller ID: ${this.phoneNumber}`);
+        
+        const phoneCallParams = {
+          ...baseCallParams,
+          from: this.phoneNumber
+        };
+
+        console.log('📞 Phone number call parameters:', {
+          to: phoneNumber,
+          from: this.phoneNumber,
+          webhookUrl: phoneCallParams.url,
+          record: phoneCallParams.record,
+          baseUrl: baseUrl
+        });
+
+        const call = await this.client.calls.create(phoneCallParams);
+
+        console.log(`✅ Call initiated successfully with phone number`);
+        console.log(`📞 Twilio Call SID: ${call.sid}`);
+        console.log(`📞 Call Status: ${call.status}`);
+
+        return {
+          success: true,
+          twilioSid: call.sid,
+          status: call.status,
+          callId: callId,
+          callerId: this.phoneNumber,
+          callerIdType: 'phone_number',
+          message: 'Real phone call initiated via Twilio with phone number'
+        };
+      }
 
     } catch (error) {
       console.error('❌ Twilio call failed:', error.message);

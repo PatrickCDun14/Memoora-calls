@@ -9,7 +9,10 @@ const optionalEnvVars = [
   'PORT',
   'BASE_URL',
   'NODE_ENV',
-  'LOG_LEVEL'
+  'LOG_LEVEL',
+  'USE_ALPHA_SENDER_ID',
+  'ALPHA_SENDER_ID',
+  'FALLBACK_PHONE_NUMBER'
 ];
 
 function validateEnvironment() {
@@ -44,6 +47,16 @@ function validateEnvironment() {
     missing.push('TWILIO_PHONE_NUMBER (must be +1XXXXXXXXXX format)');
   }
 
+  // Validate fallback phone number format if provided
+  if (process.env.FALLBACK_PHONE_NUMBER && !process.env.FALLBACK_PHONE_NUMBER.match(/^\+1\d{10}$/)) {
+    missing.push('FALLBACK_PHONE_NUMBER (must be +1XXXXXXXXXX format)');
+  }
+
+  // Validate alpha sender ID length if provided
+  if (process.env.ALPHA_SENDER_ID && process.env.ALPHA_SENDER_ID.length > 11) {
+    missing.push('ALPHA_SENDER_ID (must be 11 characters or less)');
+  }
+
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
@@ -61,6 +74,11 @@ function validateEnvironment() {
       accountSid: process.env.TWILIO_ACCOUNT_SID,
       authToken: process.env.TWILIO_AUTH_TOKEN,
       phoneNumber: process.env.TWILIO_PHONE_NUMBER
+    },
+    alphaSender: {
+      enabled: process.env.USE_ALPHA_SENDER_ID === 'true',
+      id: process.env.ALPHA_SENDER_ID || 'Memoora',
+      fallbackNumber: process.env.FALLBACK_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER
     }
   };
 }
