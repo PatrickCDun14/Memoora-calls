@@ -102,6 +102,8 @@ class SimpleTwilioService {
         try {
           console.log(`📞 Attempting call with alpha sender ID: ${this.alphaSenderId}`);
           
+          // For alpha sender ID, we need to use a special approach
+          // First, try using the alpha sender ID directly (may work in some cases)
           const alphaCallParams = {
             ...baseCallParams,
             from: this.alphaSenderId
@@ -135,10 +137,11 @@ class SimpleTwilioService {
           console.error(`❌ Alpha sender ID failed: ${error.message}`);
           
           // Check if it's an alpha sender ID specific error
-          if (error.code === 21211 || error.message.includes('Invalid') || error.message.includes('from')) {
+          if (error.code === 21211 || error.message.includes('Invalid') || error.message.includes('from') || error.message.includes('not a valid phone number')) {
             console.log(`🔄 Falling back to phone number: ${this.fallbackNumber}`);
+            console.log(`ℹ️  Note: Alpha sender ID may require special Twilio account setup`);
             
-            // Fallback to phone number
+            // Fallback to phone number with caller ID name configuration
             const fallbackCallParams = {
               ...baseCallParams,
               from: this.fallbackNumber
@@ -157,6 +160,7 @@ class SimpleTwilioService {
             console.log(`✅ Call initiated successfully with fallback phone number`);
             console.log(`📞 Twilio Call SID: ${fallbackCall.sid}`);
             console.log(`📞 Call Status: ${fallbackCall.status}`);
+            console.log(`ℹ️  Caller ID will show phone number. For alpha sender ID, contact Twilio support.`);
 
             return {
               success: true,
