@@ -285,29 +285,54 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
     // Select voice style (you can change this to 'polly' or 'traditional')
     const selectedVoice = voiceConfig.neural;
     
-        // Create simplified TwiML with selected voice configuration
+        // Create enhanced TwiML with greeting, delay, and better call handling
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <!-- Custom message with selected voice for natural sound -->
+  <!-- 2-second delay after pickup -->
+  <Pause length="2"/>
+  
+  <!-- Greeting message -->
+  <Say 
+    voice="${selectedVoice.voice}" 
+    language="${selectedVoice.language}"
+    rate="${selectedVoice.rate}"
+    pitch="${selectedVoice.pitch}"
+  >Hey hows it going, memoora here.</Say>
+  
+  <!-- Brief pause between greeting and question -->
+  <Pause length="1"/>
+  
+  <!-- Custom question/message -->
   <Say 
     voice="${selectedVoice.voice}" 
     language="${selectedVoice.language}"
     rate="${selectedVoice.rate}"
     pitch="${selectedVoice.pitch}"
   >${customMessage}</Say>
+  
+  <!-- Brief pause before recording starts -->
   <Pause length="1"/>
 
-  <!-- Start recording immediately -->
+  <!-- Enhanced recording with better timeout and action handling -->
   <Record
     maxLength="300"
-    timeout="10"
+    timeout="15"
     playBeep="true"
     action="/api/v1/recording-complete"
     method="POST"
     trim="trim-silence"
+    recordingStatusCallback="/api/v1/recording-status"
+    recordingStatusCallbackMethod="POST"
   />
 
-  <!-- Simple hangup -->
+  <!-- Handle recording completion or failure -->
+  <Say 
+    voice="${selectedVoice.voice}" 
+    language="${selectedVoice.language}"
+    rate="${selectedVoice.rate}"
+    pitch="${selectedVoice.pitch}"
+  >Thank you for sharing your story with us.</Say>
+  
   <Hangup/>
 </Response>`;
 
@@ -349,16 +374,36 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
         return res.status(200).json({ message: 'Call not found, but webhook received' });
       }
 
-      // Update call status to indicate recording received
+      // Analyze recording duration to determine outcome
+      const recordingDuration = parseInt(RecordingDuration) || 0;
+      let recordingOutcome = 'successful';
+      let outcomeReason = 'recording_completed';
+      
+      if (recordingDuration === 0) {
+        recordingOutcome = 'silent_recording';
+        outcomeReason = 'no_audio_detected';
+      } else if (recordingDuration < 3) {
+        recordingOutcome = 'too_short';
+        outcomeReason = 'recording_under_3_seconds';
+      } else if (recordingDuration > 280) {
+        recordingOutcome = 'max_length_reached';
+        outcomeReason = 'recording_hit_max_length';
+      }
+      
+      // Update call status to indicate recording received with outcome analysis
       callService.updateCallStatus(callRecord.id, 'recording_received', {
         metadata: {
           ...callRecord.metadata,
           recordingSid: RecordingSid,
           recordingUrl: RecordingUrl,
           recordingDuration: RecordingDuration,
+          recordingOutcome: recordingOutcome,
+          outcomeReason: outcomeReason,
           webhookReceivedAt: new Date().toISOString()
         }
       });
+      
+      console.log(`🎙️ Recording received for call ${callRecord.id}: ${recordingDuration}s (outcome: ${recordingOutcome})`);
 
       // Download and save recording with delay to ensure Twilio has processed it
       setTimeout(() => {
@@ -369,14 +414,22 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
             callService.addRecordingToCall(callRecord.id, recordingData);
             console.log('✅ Recording saved successfully for call', callRecord.id);
             
-            // Update call status to completed
+            // Get the recording outcome from metadata
+            const recordingOutcome = callRecord.metadata?.recordingOutcome || 'successful';
+            const outcomeReason = callRecord.metadata?.outcomeReason || 'recording_completed';
+            
+            // Update call status to completed with final outcome
             callService.updateCallStatus(callRecord.id, 'completed', {
               metadata: {
                 ...callRecord.metadata,
                 recordingDownloaded: true,
-                recordingDownloadedAt: new Date().toISOString()
+                recordingDownloadedAt: new Date().toISOString(),
+                finalOutcome: recordingOutcome,
+                finalOutcomeReason: outcomeReason
               }
             });
+            
+            console.log(`🎉 Call ${callRecord.id} completed with outcome: ${recordingOutcome} (${outcomeReason})`);
           })
           .catch(error => {
             console.error('❌ Failed to save recording:', error.message);
@@ -385,9 +438,13 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
               metadata: {
                 ...callRecord.metadata,
                 recordingError: error.message,
-                recordingFailedAt: new Date().toISOString()
+                recordingFailedAt: new Date().toISOString(),
+                finalOutcome: 'download_failed',
+                finalOutcomeReason: 'recording_download_error'
               }
             });
+            
+            console.log(`❌ Call ${callRecord.id} failed: recording download error - ${error.message}`);
           });
       }, 2000); // Wait 2 seconds for Twilio to process
 
@@ -439,13 +496,69 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
   // 📊 Call status webhook (Twilio)
   router.post('/call-status', (req, res) => {
     try {
-      const { CallSid, CallStatus, CallDuration } = req.body;
+      const { CallSid, CallStatus, CallDuration, CallDurationMinutes, CallDurationSeconds } = req.body;
+      
+      console.log('📊 Call status webhook received:', {
+        CallSid,
+        CallStatus,
+        CallDuration,
+        CallDurationMinutes,
+        CallDurationSeconds
+      });
       
       if (CallSid && CallStatus) {
         // Find and update call status
         for (const [id, call] of callService.calls) {
           if (call.twilioSid === CallSid) {
-            callService.updateCallStatus(id, CallStatus, { duration: CallDuration });
+            // Enhanced status mapping for better call outcome tracking
+            let mappedStatus = CallStatus;
+            let outcome = 'unknown';
+            
+            switch (CallStatus) {
+              case 'completed':
+                outcome = 'successful_recording';
+                break;
+              case 'busy':
+                outcome = 'line_busy';
+                break;
+              case 'no-answer':
+                outcome = 'no_answer';
+                break;
+              case 'failed':
+                outcome = 'call_failed';
+                break;
+              case 'canceled':
+                outcome = 'call_canceled';
+                break;
+              case 'answered':
+                outcome = 'call_answered';
+                break;
+              case 'in-progress':
+                outcome = 'call_in_progress';
+                break;
+              case 'ringing':
+                outcome = 'call_ringing';
+                break;
+              default:
+                outcome = CallStatus;
+            }
+            
+            // Update call with enhanced metadata
+            callService.updateCallStatus(id, mappedStatus, { 
+              duration: CallDuration,
+              durationMinutes: CallDurationMinutes,
+              durationSeconds: CallDurationSeconds,
+              outcome: outcome,
+              statusUpdatedAt: new Date().toISOString(),
+              metadata: {
+                ...call.metadata,
+                lastStatus: CallStatus,
+                lastStatusAt: new Date().toISOString(),
+                callOutcome: outcome
+              }
+            });
+            
+            console.log(`✅ Call ${id} status updated to ${mappedStatus} (outcome: ${outcome})`);
             break;
           }
         }

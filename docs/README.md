@@ -27,4 +27,8 @@ This directory contains all documentation for the Memoora Call Recording Microse
 
 ---
 
+<div align="center">
+
 **📖 Start with the [ALPHA_SENDER_ID_GUIDE.md](ALPHA_SENDER_ID_GUIDE.md) for complete setup instructions.**
+
+</div>
