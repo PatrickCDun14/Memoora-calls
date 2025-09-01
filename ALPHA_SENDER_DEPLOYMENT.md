@@ -16,8 +16,9 @@ TWILIO_ACCOUNT_SID=your_twilio_account_sid
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_PHONE_NUMBER=+1234567890
 
-# Alpha Sender ID Configuration
-USE_ALPHA_SENDER_ID=true
+# Alpha Sender ID Configuration (Optional)
+# Set to 'true' only after Twilio account setup - see ALPHA_SENDER_TWILIO_SETUP.md
+USE_ALPHA_SENDER_ID=false
 ALPHA_SENDER_ID=Memoora
 FALLBACK_PHONE_NUMBER=+1234567890  # Optional, defaults to TWILIO_PHONE_NUMBER
 

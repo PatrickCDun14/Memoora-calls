@@ -217,9 +217,9 @@ The Alpha Sender ID feature has been successfully implemented and is ready for p
 - ❌ Special account permissions
 
 **Next Steps:**
-1. **Contact Twilio Support** to enable alpha sender ID (see `ALPHA_SENDER_TWILIO_SETUP.md`)
-2. **Keep current configuration** - system works perfectly with fallback
-3. **Monitor fallback usage** while working on alpha sender ID setup
+1. **Keep alpha sender ID disabled** for now (`USE_ALPHA_SENDER_ID=false`)
+2. **Contact Twilio Support** to enable alpha sender ID (see `ALPHA_SENDER_TWILIO_SETUP.md`)
+3. **Monitor regular call performance** while working on alpha sender ID setup
 4. **Consider alternative solutions** like caller ID name registration
 
 The implementation follows best practices for reliability, maintainability, and user experience. The automatic fallback mechanism ensures that calls will always work, even while you work on enabling alpha sender ID functionality with Twilio.

@@ -97,8 +97,8 @@ class SimpleTwilioService {
         baseCallParams.statusCallbackEvent = [...baseCallParams.statusCallbackEvent, 'answered'];
       }
 
-      // Try alpha sender ID first if enabled
-      if (this.useAlphaSender) {
+      // Check if alpha sender ID is explicitly enabled
+      if (this.useAlphaSender && process.env.USE_ALPHA_SENDER_ID === 'true') {
         try {
           console.log(`📞 Attempting call with alpha sender ID: ${this.alphaSenderId}`);
           
@@ -179,8 +179,9 @@ class SimpleTwilioService {
           throw error;
         }
       } else {
-        // Alpha sender ID disabled, use phone number directly
+        // Alpha sender ID disabled or not explicitly enabled, use phone number directly
         console.log(`📞 Using phone number caller ID: ${this.phoneNumber}`);
+        console.log(`ℹ️  Alpha sender ID is disabled. Set USE_ALPHA_SENDER_ID=true to enable.`);
         
         const phoneCallParams = {
           ...baseCallParams,
