@@ -1,6 +1,6 @@
-# Memoora Calls Microservice
+# 📞 Memoora Call Recording Microservice
 
-A simple, focused microservice for initiating phone calls and recording stories via Twilio.
+A production-ready microservice for initiating phone calls and recording stories via Twilio, with professional caller ID support.
 
 ## 🎯 What It Does
 
@@ -51,7 +51,7 @@ The service will be available at `http://localhost:5005`
 - `POST /api/v1/generate-api-key` - Generate new API key
 
 ### Protected Endpoints (require `x-api-key` header)
-- `POST /api/v1/call` - Initiate a phone call
+- `POST /api/v1/call` - Initiate outbound phone call
 - `GET /api/v1/calls` - List all calls
 - `GET /api/v1/calls/:id` - Get call details
 - `GET /api/v1/recordings` - List all recordings
@@ -109,7 +109,7 @@ FALLBACK_PHONE_NUMBER=+1234567890  # Optional fallback
 - ✅ **Higher answer rates** - People are more likely to answer calls from known brands
 - ✅ **Automatic fallback** - Falls back to phone number if alpha sender ID not supported
 
-For detailed configuration and testing, see [ALPHA_SENDER_ID_GUIDE.md](ALPHA_SENDER_ID_GUIDE.md).
+For detailed configuration and testing, see [docs/ALPHA_SENDER_ID_GUIDE.md](docs/ALPHA_SENDER_ID_GUIDE.md).
 
 ## 🏗️ Architecture
 
@@ -125,81 +125,103 @@ For detailed configuration and testing, see [ALPHA_SENDER_ID_GUIDE.md](ALPHA_SEN
                        │  - API Keys     │
                        │  - Calls        │
                        │  - Recordings   │
-                       └─────────────────┘
 ```
-
-## 🔧 Local Development
-
-### Using ngrok for Twilio Webhooks
-```bash
-# Install ngrok
-npm install -g ngrok
-
-# Start your service
-npm run dev
-
-# In another terminal, expose local service
-ngrok http 5005
-
-# Update .env with ngrok URL
-BASE_URL=https://your-ngrok-url.ngrok-free.app
-```
-
-### Testing the Complete Flow
-1. Generate an API key
-2. Make a test call
-3. Check call status
-4. Verify recording download
 
 ## 📁 Project Structure
 
 ```
-├── index.js                    # Main application entry point
-├── routes-memoora/
-│   └── simple-memoora.js      # API route definitions
-├── utils/
-│   ├── simple-api-key-service.js    # API key management
-│   ├── simple-call-service.js       # Call tracking
-│   ├── simple-twilio-service.js     # Twilio integration
-│   └── simple-recording-service.js  # Recording storage
-├── config/
-│   └── environment.js         # Environment configuration
-├── recordings/                # Downloaded audio files
-└── package.json
+├── config/                 # Configuration files
+│   └── environment.js     # Environment validation
+├── docs/                  # Documentation
+│   ├── ALPHA_SENDER_*.md  # Alpha sender ID guides
+│   ├── INTEGRATION_README.md
+│   ├── PRODUCTION_*.md    # Production deployment guides
+│   └── RENDER_DEPLOYMENT.md
+├── routes-memoora/        # API routes
+│   └── simple-memoora.js  # Main route handlers
+├── tests/                 # Test files
+│   ├── test-alpha-sender*.js
+│   └── test-frontend-integration.js
+├── scripts/               # Utility scripts
+│   └── test-production.sh
+├── utils/                 # Service modules
+│   ├── simple-api-key-service.js
+│   ├── simple-call-service.js
+│   ├── simple-recording-service.js
+│   └── simple-twilio-service.js
+├── recordings/            # Audio recordings storage
+├── index.js              # Main application entry point
+├── package.json          # Dependencies and scripts
+└── README.md             # This file
+```
+
+## 📚 Documentation
+
+### Core Documentation
+- **[docs/ALPHA_SENDER_ID_GUIDE.md](docs/ALPHA_SENDER_ID_GUIDE.md)** - Complete alpha sender ID implementation guide
+- **[docs/ALPHA_SENDER_DEPLOYMENT.md](docs/ALPHA_SENDER_DEPLOYMENT.md)** - Production deployment guide
+- **[docs/ALPHA_SENDER_SUMMARY.md](docs/ALPHA_SENDER_SUMMARY.md)** - Implementation summary
+- **[docs/ALPHA_SENDER_TWILIO_SETUP.md](docs/ALPHA_SENDER_TWILIO_SETUP.md)** - Twilio alpha sender ID setup guide
+
+### Integration & Deployment
+- **[docs/INTEGRATION_README.md](docs/INTEGRATION_README.md)** - Integration guide for main application
+- **[docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md)** - Production deployment instructions
+- **[docs/RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md)** - Render-specific deployment guide
+- **[docs/PRODUCTION_ENV_TEMPLATE.md](docs/PRODUCTION_ENV_TEMPLATE.md)** - Production environment template
+
+### Testing
+- **[tests/test-alpha-sender.js](tests/test-alpha-sender.js)** - Full alpha sender ID testing
+- **[tests/test-alpha-sender-structure.js](tests/test-alpha-sender-structure.js)** - Structure validation
+- **[tests/test-frontend-integration.js](tests/test-frontend-integration.js)** - Frontend integration testing
+- **[scripts/test-production.sh](scripts/test-production.sh)** - Production testing script
+
+## 🧪 Testing
+
+### Run Structure Tests
+```bash
+node tests/test-alpha-sender-structure.js
+```
+
+### Run Full Alpha Sender Tests
+```bash
+node tests/test-alpha-sender.js
+```
+
+### Test Production Deployment
+```bash
+./scripts/test-production.sh
 ```
 
 ## 🚀 Deployment
 
-### Docker
+### Render Deployment
+The service is configured for deployment on Render. See [docs/RENDER_DEPLOYMENT.md](docs/RENDER_DEPLOYMENT.md) for details.
+
+### Environment Variables
+Set these in your deployment platform:
 ```bash
-docker build -t memoora-calls .
-docker run -p 5005:5005 --env-file .env memoora-calls
+TWILIO_ACCOUNT_SID=your_twilio_account_sid
+TWILIO_AUTH_TOKEN=your_twilio_auth_token
+TWILIO_PHONE_NUMBER=+1234567890
+USE_ALPHA_SENDER_ID=false  # Set to true when ready
+ALPHA_SENDER_ID=Memoora
 ```
 
-### Render
-The service includes `render.yaml` for automatic deployment on Render.
+## 📞 Support
 
-## 📊 Monitoring
+### Getting Help
+1. **Check logs** for detailed error messages
+2. **Run test scripts** to verify configuration
+3. **Review documentation** for troubleshooting steps
+4. **Contact support** with specific error codes and logs
 
-- **Health Check**: `GET /health`
-- **Service Stats**: `GET /api/v1/stats`
-- **API Key Usage**: Tracked per key with rate limiting
+### Health Check
+```bash
+curl https://memoora-calls.onrender.com/health
+```
 
-## 🔒 Security Features
+---
 
-- API key authentication for all protected endpoints
-- Rate limiting per API key
-- CORS configuration for allowed domains
-- Input validation and sanitization
+**🎉 Ready to start making professional calls with Memoora!**
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📄 License
-
-MIT License - see LICENSE file for details
+For detailed setup instructions, see the documentation in the `docs/` directory.
