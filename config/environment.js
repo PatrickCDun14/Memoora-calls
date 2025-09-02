@@ -12,7 +12,8 @@ const optionalEnvVars = [
   'LOG_LEVEL',
   'USE_ALPHA_SENDER_ID',
   'ALPHA_SENDER_ID',
-  'FALLBACK_PHONE_NUMBER'
+  'FALLBACK_PHONE_NUMBER',
+  'MAIN_BACKEND_URL'
 ];
 
 function validateEnvironment() {
@@ -57,6 +58,15 @@ function validateEnvironment() {
     missing.push('ALPHA_SENDER_ID (must be 11 characters or less)');
   }
 
+  // Validate MAIN_BACKEND_URL format if provided
+  if (process.env.MAIN_BACKEND_URL) {
+    try {
+      new URL(process.env.MAIN_BACKEND_URL);
+    } catch (error) {
+      missing.push('MAIN_BACKEND_URL (invalid URL format)');
+    }
+  }
+
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
@@ -79,6 +89,9 @@ function validateEnvironment() {
       enabled: process.env.USE_ALPHA_SENDER_ID === 'true',
       id: process.env.ALPHA_SENDER_ID || 'Memoora',
       fallbackNumber: process.env.FALLBACK_PHONE_NUMBER || process.env.TWILIO_PHONE_NUMBER
+    },
+    mainBackend: {
+      url: process.env.MAIN_BACKEND_URL
     }
   };
 }
