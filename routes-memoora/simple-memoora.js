@@ -448,7 +448,7 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
       setTimeout(() => {
         console.log('🎵 Starting recording download for call:', callRecord.id);
         recordingService.downloadRecording(RecordingUrl, RecordingSid, callRecord.id)
-          .then(recordingData => {
+          .then(async (recordingData) => {
             // Update call with recording info
             callService.addRecordingToCall(callRecord.id, recordingData);
             console.log('✅ Recording saved successfully for call', callRecord.id);
