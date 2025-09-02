@@ -1,5 +1,44 @@
 const express = require('express');
 const router = express.Router();
+const https = require('https');
+
+// Helper function to make HTTP requests
+const makeHttpRequest = (url, options, data) => {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const requestOptions = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: options.method || 'GET',
+      headers: options.headers || {}
+    };
+
+    const req = https.request(requestOptions, (res) => {
+      let responseData = '';
+      res.on('data', (chunk) => {
+        responseData += chunk;
+      });
+      res.on('end', () => {
+        resolve({
+          ok: res.statusCode >= 200 && res.statusCode < 300,
+          status: res.statusCode,
+          statusText: res.statusMessage,
+          json: () => Promise.resolve(JSON.parse(responseData))
+        });
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(error);
+    });
+
+    if (data) {
+      req.write(data);
+    }
+    req.end();
+  });
+};
 
 module.exports = function(apiKeyService, callService, twilioService, recordingService) {
 
@@ -413,6 +452,47 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
             // Update call with recording info
             callService.addRecordingToCall(callRecord.id, recordingData);
             console.log('✅ Recording saved successfully for call', callRecord.id);
+            
+            // Send webhook to main backend if configured
+            if (process.env.MAIN_BACKEND_URL) {
+              try {
+                const webhookData = {
+                  CallSid: callRecord.twilioSid,
+                  RecordingSid: recordingData.recordingSid,
+                  RecordingUrl: recordingData.recordingUrl,
+                  RecordingDuration: callRecord.metadata?.recordingDuration || '0',
+                  filename: recordingData.filename,
+                  fileSize: recordingData.size,
+                  durationSeconds: parseInt(callRecord.metadata?.recordingDuration) || 0,
+                  callId: callRecord.id,
+                  phoneNumber: callRecord.phoneNumber,
+                  customMessage: callRecord.customMessage,
+                  callType: callRecord.callType,
+                  storytellerId: callRecord.storytellerId,
+                  familyMemberId: callRecord.familyMemberId,
+                  scheduledCallId: callRecord.scheduledCallId,
+                  apiKeyInfo: callRecord.apiKeyInfo
+                };
+                
+                console.log('📤 Sending webhook to main backend:', process.env.MAIN_BACKEND_URL);
+                
+                const response = await makeHttpRequest(`${process.env.MAIN_BACKEND_URL}/api/calls/recording-complete`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                }, JSON.stringify(webhookData));
+                
+                if (response.ok) {
+                  const responseData = await response.json();
+                  console.log('✅ Webhook sent to main backend successfully:', responseData);
+                } else {
+                  console.error('❌ Failed to send webhook to main backend:', response.status, response.statusText);
+                }
+              } catch (error) {
+                console.error('❌ Error sending webhook to main backend:', error.message);
+              }
+            } else {
+              console.log('ℹ️  MAIN_BACKEND_URL not configured - skipping webhook');
+            }
             
             // Get the recording outcome from metadata
             const recordingOutcome = callRecord.metadata?.recordingOutcome || 'successful';
