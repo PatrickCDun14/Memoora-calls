@@ -352,7 +352,7 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
   <!-- Brief pause before recording starts -->
   <Pause length="1"/>
 
-  <!-- Enhanced recording with better timeout and action handling -->
+  <!-- Enhanced recording with post-call transcription -->
   <Record
     maxLength="300"
     timeout="15"
@@ -362,6 +362,9 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
     trim="trim-silence"
     recordingStatusCallback="/api/v1/recording-status"
     recordingStatusCallbackMethod="POST"
+    transcribe="true"
+    transcribeCallback="/api/v1/transcription-complete"
+    transcribeCallbackMethod="POST"
   />
 
   <!-- Handle recording completion or failure -->
@@ -498,6 +501,10 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
             const recordingOutcome = callRecord.metadata?.recordingOutcome || 'successful';
             const outcomeReason = callRecord.metadata?.outcomeReason || 'recording_completed';
             
+            // Check if transcription is available
+            const hasTranscription = callRecord.metadata?.transcriptionText;
+            const transcriptionStatus = callRecord.metadata?.transcriptionStatus;
+            
             // Update call status to completed with final outcome
             callService.updateCallStatus(callRecord.id, 'completed', {
               metadata: {
@@ -505,11 +512,18 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
                 recordingDownloaded: true,
                 recordingDownloadedAt: new Date().toISOString(),
                 finalOutcome: recordingOutcome,
-                finalOutcomeReason: outcomeReason
+                finalOutcomeReason: outcomeReason,
+                transcriptionAvailable: !!hasTranscription,
+                transcriptionStatus: transcriptionStatus || 'pending'
               }
             });
             
             console.log(`🎉 Call ${callRecord.id} completed with outcome: ${recordingOutcome} (${outcomeReason})`);
+            if (hasTranscription) {
+              console.log(`📝 Transcription available: ${transcriptionStatus}`);
+            } else {
+              console.log(`⏳ Transcription pending or not available`);
+            }
           })
           .catch(error => {
             console.error('❌ Failed to save recording:', error.message);
@@ -532,6 +546,103 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
     } catch (error) {
       console.error('❌ Error in recording webhook:', error);
       res.status(500).json({ error: 'Webhook processing failed' });
+    }
+  });
+
+  // 📝 Transcription complete webhook (Twilio)
+  router.post('/transcription-complete', (req, res) => {
+    try {
+      const { CallSid, RecordingSid, TranscriptionSid, TranscriptionText, TranscriptionStatus, TranscriptionUrl } = req.body;
+      
+      console.log('📝 Transcription complete webhook received:', {
+        CallSid,
+        RecordingSid,
+        TranscriptionSid,
+        TranscriptionStatus,
+        TranscriptionText: TranscriptionText ? TranscriptionText.substring(0, 100) + '...' : 'No text'
+      });
+      
+      if (!CallSid || !TranscriptionSid) {
+        console.warn('⚠️  Missing required transcription data:', req.body);
+        return res.status(400).json({ error: 'Missing required transcription data' });
+      }
+
+      // Find call by Twilio SID
+      let callRecord = null;
+      for (const [id, call] of callService.calls) {
+        if (call.twilioSid === CallSid) {
+          callRecord = call;
+          break;
+        }
+      }
+
+      if (!callRecord) {
+        console.warn('⚠️  No call record found for Twilio SID:', CallSid);
+        return res.status(200).json({ message: 'Call not found, but transcription webhook received' });
+      }
+
+      // Update call with transcription info
+      callService.updateCallStatus(callRecord.id, callRecord.status, {
+        metadata: {
+          ...callRecord.metadata,
+          transcriptionSid: TranscriptionSid,
+          transcriptionStatus: TranscriptionStatus,
+          transcriptionText: TranscriptionText,
+          transcriptionUrl: TranscriptionUrl,
+          transcriptionReceivedAt: new Date().toISOString()
+        }
+      });
+
+      console.log(`📝 Transcription received for call ${callRecord.id}: ${TranscriptionStatus}`);
+
+      // Send transcription to main backend if configured
+      if (process.env.MAIN_BACKEND_URL && TranscriptionText) {
+        try {
+          const webhookData = {
+            CallSid: callRecord.twilioSid,
+            RecordingSid: callRecord.metadata?.recordingSid,
+            TranscriptionSid: TranscriptionSid,
+            TranscriptionText: TranscriptionText,
+            TranscriptionStatus: TranscriptionStatus,
+            TranscriptionUrl: TranscriptionUrl,
+            callId: callRecord.id,
+            phoneNumber: callRecord.phoneNumber,
+            customMessage: callRecord.customMessage,
+            callType: callRecord.callType,
+            storytellerId: callRecord.storytellerId,
+            familyMemberId: callRecord.familyMemberId,
+            scheduledCallId: callRecord.scheduledCallId,
+            apiKeyInfo: callRecord.apiKeyInfo
+          };
+          
+          console.log('📤 Sending transcription webhook to main backend:', process.env.MAIN_BACKEND_URL);
+          
+          makeHttpRequest(`${process.env.MAIN_BACKEND_URL}/api/calls/transcription-complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          }, JSON.stringify(webhookData))
+          .then(response => {
+            if (response.ok) {
+              const responseData = response.json();
+              console.log('✅ Transcription webhook sent to main backend successfully:', responseData);
+            } else {
+              console.error('❌ Failed to send transcription webhook to main backend:', response.status, response.statusText);
+            }
+          })
+          .catch(error => {
+            console.error('❌ Error sending transcription webhook to main backend:', error.message);
+          });
+        } catch (error) {
+          console.error('❌ Error preparing transcription webhook:', error.message);
+        }
+      } else {
+        console.log('ℹ️  MAIN_BACKEND_URL not configured or no transcription text - skipping webhook');
+      }
+
+      res.status(200).json({ message: 'Transcription webhook received and processing started' });
+    } catch (error) {
+      console.error('❌ Error in transcription webhook:', error);
+      res.status(500).json({ error: 'Transcription webhook processing failed' });
     }
   });
 
