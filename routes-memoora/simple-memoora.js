@@ -621,9 +621,9 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           }, JSON.stringify(webhookData))
-          .then(response => {
+          .then(async response => {
             if (response.ok) {
-              const responseData = response.json();
+              const responseData = await response.json();
               console.log('✅ Transcription webhook sent to main backend successfully:', responseData);
             } else {
               console.error('❌ Failed to send transcription webhook to main backend:', response.status, response.statusText);
