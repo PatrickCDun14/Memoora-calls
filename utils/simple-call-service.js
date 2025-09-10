@@ -22,6 +22,7 @@ class SimpleCallService {
       familyMemberId,
       scheduledCallId,
       callType,
+      recordingType,
       interactive,
       apiKeyInfo
     } = callData;
@@ -37,6 +38,7 @@ class SimpleCallService {
       familyMemberId: familyMemberId || null,
       scheduledCallId: scheduledCallId || null,
       callType: callType || 'storytelling',
+      recordingType: recordingType || 'phone_call',
       interactive: interactive || false,
       status: 'initiated',
       apiKeyId: apiKeyInfo.id,
@@ -46,6 +48,7 @@ class SimpleCallService {
       metadata: {
         question: customMessage,
         callType: callType || 'storytelling',
+        recordingType: recordingType || 'phone_call',
         initiatedAt: now,
         apiKeyUsed: apiKeyInfo.id
       }

@@ -474,6 +474,7 @@ module.exports = function(apiKeyService, callService, twilioService, recordingSe
                   storytellerId: callRecord.storytellerId,
                   familyMemberId: callRecord.familyMemberId,
                   scheduledCallId: callRecord.scheduledCallId,
+                  recordingType: callRecord.recordingType, // Pass recordingType to webhook
                   apiKeyInfo: callRecord.apiKeyInfo
                 };
                 
